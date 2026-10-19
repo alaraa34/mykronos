@@ -4,3 +4,7 @@
 *.log
 /fichiers/
 .DS_Store
+
+# Configuration avec mots de passe (base de données, mail)
+/ENVIR*.txt
+/MAIL*.txt
