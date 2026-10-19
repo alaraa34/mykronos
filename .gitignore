@@ -1,0 +1,6 @@
+/vendor/
+/nbproject/private/
+.env
+*.log
+/fichiers/
+.DS_Store
