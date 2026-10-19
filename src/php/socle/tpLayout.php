@@ -20,10 +20,18 @@
 <?php if (isset($css)){echo $css;} ?>
 </head>
 <body>
-    <!-- pas encore de base de données : ni menu (mk_menu), ni connexion, ni paramètres -->
-    <nav class="navbar navbar-dark navbar-custom sticky-top">
+    <!-- menu construit depuis mk_menu (pas encore de connexion : table user absente) -->
+    <nav class="navbar navbar-expand-md navbar-dark navbar-custom sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand" href="index.php">myKronos</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNavDropdown">
+                <ul class="navbar-nav">
+                    <?= (new \shared\php\classes\socle\Menu())->myhtml ?>
+                </ul>
+            </div>
             <span class="navbar-text">
                 <?php if (isset($messageBarreMenu)){echo ($messageBarreMenu);} ?>
             </span>

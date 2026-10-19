@@ -2,3 +2,7 @@
 .navbar-custom {
     background-color: #2b2d30;
 }
+
+/* fichier exclu de l'import : ligne estompée */
+#fichiersATraiter tr.fichier-exclus td { opacity: .45; }
+#fichiersATraiter tr.fichier-exclus td:nth-last-child(2) { opacity: 1; }
