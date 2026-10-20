@@ -12,9 +12,31 @@ function ctDetecterFichier(): void {
         $compteRendu = Fichier::detecter();
     } catch (\Throwable $e) {
         error_log("ctDetecterFichier : " . $e->getMessage() . " (" . $e->getFile() . ":" . $e->getLine() . ")");
-        $compteRendu = ['ajoutes' => [], 'modifies' => [], 'inchanges' => [],
+        $compteRendu = ['ajoutes' => [], 'modifies' => [], 'renommes' => [], 'inchanges' => [],
                         'anomalies' => ["Détection interrompue : " . $e->getMessage()]];
     }
+    $aSupprimer = Fichier::fichiersASupprimer();            //affichés, supprimés seulement sur demande
+    $extensions = Fichier::extensionsASupprimer();
+    $suppression ??= null;
+    require('tpDetection.php');
+}
+
+function ctSupprimerFichiersInutiles(): void {
+//supprime les fichiers dont l'extension est dans la nomenclature SUPPRIMER (formulaire POST de tpDetection), puis relance la détection
+    if (filter_input(INPUT_SERVER, 'REQUEST_METHOD') !== 'POST') {
+        ctDetecterFichier();
+        return;
+    }
+    set_time_limit(300);
+    $suppression = Fichier::supprimerFichiersInutiles();
+    try {
+        $compteRendu = Fichier::detecter();
+    } catch (\Throwable $e) {
+        $compteRendu = ['ajoutes' => [], 'modifies' => [], 'renommes' => [], 'inchanges' => [],
+                        'anomalies' => ["Détection interrompue : " . $e->getMessage()]];
+    }
+    $aSupprimer = Fichier::fichiersASupprimer();
+    $extensions = Fichier::extensionsASupprimer();
     require('tpDetection.php');
 }
 

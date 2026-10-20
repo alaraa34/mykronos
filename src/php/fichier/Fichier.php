@@ -33,6 +33,11 @@ class Fichier extends Mere
     public const PREFIXE_KRONOS     = "from";           //typologies des exports de mes Kronos : fromK2, fromK3
     public const EXTENSION          = "pcg";
     public const FORMAT_PREFIXE_ID  = "%04d_";          //préfixe id du nom téléchargé, ex 0012_JMJ.PCG
+    public const GROUPE_A_SUPPRIMER = "SUPPRIMER";      //nomenclature : extensions des fichiers inutiles (nom = pdf, mp4...)
+    //extensions jamais supprimées, même si elles sont dans la nomenclature : fichiers utiles à une installation sur le Kronos
+    public const MOT_NAUTILUS       = "nautilus";       //PCG de Nautilus : nom contenant ce mot, ou en-tête Nautilus
+    public const MODELE_NAUTILUS    = 0xDD;             //octet 4 de l'en-tête KORG d'un PCG de Nautilus
+    public const EXTENSIONS_KRONOS  = ["pcg", "ksc", "kmp", "ksf", "sng", "exsins", "kge", "kgl", "mid", "wav", "aif", "aiff"];
 
     //------------------------------------------------------------------------------------------------
     //CONSTRUCTEUR
@@ -51,6 +56,7 @@ class Fichier extends Mere
     //  - emplacement connu, date différente       : nouvelle date, importContenu et importComposition remis à false
     //l'emplacement identifie le fichier : un même nom peut exister dans deux dossiers différents
     //les exports de mes Kronos (fromK2 / fromK3) sont d'abord renommés K2_aaaa-mm-jj.PCG / K3_aaaa-mm-jj.PCG
+    //les PCG de Nautilus ne sont pas inscrits : ils sont proposés à la suppression (fichiersASupprimer)
     //retourne le compte rendu ['ajoutes'=>[], 'modifies'=>[], 'renommes'=>[], 'inchanges'=>[], 'anomalies'=>[]]
         $compteRendu = ['ajoutes' => [], 'modifies' => [], 'renommes' => [], 'inchanges' => [], 'anomalies' => []];
         $racine = TbIndex::projetPath() . self::REPERTOIRE . "/";
@@ -62,6 +68,7 @@ class Fichier extends Mere
                 continue;
             }
             foreach (self::listerPCG($racine . $dossier) as $relatif) {
+                if (self::estNautilus($racine . $dossier . "/" . $relatif)) {continue;}
                 if (str_starts_with((string)$typologie['zone'], self::PREFIXE_KRONOS)) {
                     $relatif = self::renommerExportKronos($racine . $dossier, $relatif, (string)$typologie['zone'], $compteRendu);
                 }
@@ -171,6 +178,96 @@ class Fichier extends Mere
     //------------------------------------------------------------------------------------------------
     //TECHNIQUE
     //-----------------------------------------------------------------------------------------------
+    //------------------------------------------------------------------------------------------------
+    //FICHIERS INUTILES (allègement du répertoire fichiers/pcg)
+    //-----------------------------------------------------------------------------------------------
+    public static function extensionsASupprimer(): array {
+    //extensions de la nomenclature SUPPRIMER, en minuscules, sans les extensions protégées du Kronos
+        $extensions = [];
+        foreach (Nomenclature::mdNomenclatureGetListe(self::GROUPE_A_SUPPRIMER, "nom") as $ligne) {
+            $extension = strtolower(ltrim(trim((string)$ligne['zone']), "."));
+            if ($extension !== "" && !in_array($extension, self::EXTENSIONS_KRONOS, true)) {$extensions[] = $extension;}
+        }
+        return array_values(array_unique($extensions));
+    }
+
+    public static function fichiersASupprimer(): array {
+    //fichiers de fichiers/pcg à supprimer : extension de la nomenclature SUPPRIMER, ou PCG de Nautilus
+    //[['emplacement' => chemin relatif, 'taille' => octets, 'raison' => extension ou Nautilus], ...]
+        $extensions = self::extensionsASupprimer();
+        $racine = TbIndex::projetPath() . self::REPERTOIRE . "/" . self::REPERTOIRE_PCG;
+        if (!is_dir($racine)) {return [];}
+        $liste = [];
+        $iterateur = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($racine, \FilesystemIterator::SKIP_DOTS));
+        foreach ($iterateur as $element) {
+            //.DS_Store : l'extension est "ds_store"
+            $nom = $element->getFilename();
+            $extension = strtolower(str_starts_with($nom, ".") && substr_count($nom, ".") === 1 ? substr($nom, 1) : $element->getExtension());
+            if (!$element->isFile()) {continue;}
+            $raison = match (true) {
+                in_array($extension, $extensions, true)                          => $extension,
+                $extension === self::EXTENSION && self::estNautilus($element->getPathname()) => "Nautilus",
+                default                                                          => null,
+            };
+            if ($raison !== null) {
+                $liste[] = ['emplacement' => self::REPERTOIRE_PCG . "/" . str_replace("\\", "/", substr($element->getPathname(), strlen($racine) + 1)),
+                            'taille'      => (int)$element->getSize(), 'raison' => $raison];
+            }
+        }
+        usort($liste, fn($a, $b) => strnatcasecmp($a['emplacement'], $b['emplacement']));
+        return $liste;
+    }
+
+    public static function supprimerFichiersInutiles(): array {
+    //supprime les fichiers listés par fichiersASupprimer puis les dossiers devenus vides (sauf les dossiers de typologie)
+    //retourne ['supprimes' => n, 'octets' => n, 'dossiers' => n, 'erreurs' => [...]]
+        $resultat = ['supprimes' => 0, 'octets' => 0, 'dossiers' => 0, 'erreurs' => []];
+        $racine = TbIndex::projetPath() . self::REPERTOIRE . "/";
+        $dossiers = [];
+        foreach (self::fichiersASupprimer() as $fichier) {
+            $chemin = $racine . $fichier['emplacement'];
+            if (@unlink($chemin)) {
+                if ($fichier['raison'] === "Nautilus") {self::oublier($fichier['emplacement']);}
+                $resultat['supprimes']++;
+                $resultat['octets'] += $fichier['taille'];
+                $dossiers[dirname($chemin)] = true;
+            } else {
+                $resultat['erreurs'][] = "Suppression impossible : " . $fichier['emplacement'];
+            }
+        }
+        //dossiers vides, du plus profond au moins profond, sans remonter jusqu'aux dossiers de typologie
+        $typologies = array_map(fn($t) => realpath($racine . self::REPERTOIRE_PCG . "/" . $t['zone']),
+                                Nomenclature::mdNomenclatureGetListe(self::GROUPE_TYPOLOGIE, "nom"));
+        $aVoir = array_keys($dossiers);
+        while (count($aVoir) > 0) {
+            usort($aVoir, fn($a, $b) => strlen($b) <=> strlen($a));
+            $dossier = array_shift($aVoir);
+            $reel = realpath($dossier);
+            if ($reel === false || in_array($reel, $typologies, true) || !str_starts_with($reel, (string)realpath($racine . self::REPERTOIRE_PCG))) {continue;}
+            if (count(scandir($dossier)) === 2 && @rmdir($dossier)) {
+                $resultat['dossiers']++;
+                $aVoir[] = dirname($dossier);
+            }
+        }
+        return $resultat;
+    }
+
+    public static function estNautilus(string $chemin): bool {
+    //PCG de Nautilus : "nautilus" dans le nom, ou en-tête KORG du Nautilus
+        if (stripos(basename($chemin), self::MOT_NAUTILUS) !== false) {return true;}
+        $entete = @file_get_contents($chemin, false, null, 0, 8);
+        return is_string($entete) && strlen($entete) === 8 && str_starts_with($entete, "KORG")
+            && ord($entete[4]) === self::MODELE_NAUTILUS;
+    }
+
+    private static function oublier(string $emplacement): void {
+    //retire de la base un PCG supprimé du disque : ses sons et set lists suivent (clés étrangères), puis les liens de composition
+        $ligne = ModelU::mdSelectTableUnique(self::TABLE, ['emplacement' => $emplacement]);
+        if (count($ligne) === 0) {return;}
+        Model::mdRequeteExecuter("DELETE FROM " . PREFIXE_BDD . "combi_utilise_program WHERE idFichier = :id", ['id' => (int)$ligne['id']]);
+        Model::mdRequeteExecuter("DELETE FROM " . self::TABLE . " WHERE id = :id", ['id' => (int)$ligne['id']]);
+    }
+
     private static function listerPCG(string $repertoire): array {
     //chemins relatifs (séparateur /) des .pcg du répertoire et de ses sous-répertoires, extension sans casse
         $liste = [];
