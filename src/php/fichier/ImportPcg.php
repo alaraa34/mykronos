@@ -7,7 +7,7 @@ namespace mykronos\src\php\fichier;
  * Pour chaque fichier non exclu dont le contenu ou la composition reste à importer :
  *  - lecture du PCG (LecteurPcg)
  *  - sons : création / mise à jour (clé idFichier + type + banque), suppression des sons disparus
- *    catégorie et sous-catégorie (Programs et Combis) via la table récursive, créées « à renseigner » si besoin
+ *    catégorie et sous-catégorie (Programs et Combis, chacun sa liste) via la table récursive, créées « à renseigner » si besoin
  *  - composition : les liens combi -> program du fichier sont remplacés
  *  - importContenu et importComposition passent à 1
  * Tout ou rien par fichier : à la moindre anomalie, rien n'est enregistré pour ce fichier.
@@ -73,7 +73,8 @@ class ImportPcg
                         continue;
                     }
                     $idSsCategorie = $son['categorie'] === null ? null
-                            : Categorie::idSousCategorie($son['categorie'], $son['sousCategorie'], $resultat['categories']);
+                            : Categorie::idSousCategorie($types[$son['type']], $son['categorie'], $son['sousCategorie'],
+                                                  $resultat['categories']);
                     $idSon = 0;
                     $compteurs[Son::enregistrer($idFichier, $types[$son['type']], $son['banque'], $son['nom'],
                                                 $idSsCategorie, $idSon)]++;

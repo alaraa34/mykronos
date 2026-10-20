@@ -16,7 +16,8 @@
 <?php
     include_once (ROOT_PATH . 'shared/includes/bootstrap_jquery_css.php');
 ?>
-<link rel="stylesheet" href="src/css/mykronos.css" type="text/css" media="screen" />
+<!-- ?v= date du fichier : le navigateur recharge la feuille de style dès qu'elle change -->
+<link rel="stylesheet" href="src/css/mykronos.css?v=<?= @filemtime(__DIR__ . '/../../css/mykronos.css') ?>" type="text/css" media="screen" />
 <?php if (isset($css)){echo $css;} ?>
 </head>
 <body>
