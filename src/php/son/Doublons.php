@@ -16,7 +16,7 @@ class Doublons
 {
     public static function detecter(): array {
     //['K2' => ['fichier' => libellé, 'doublons' => [...]], 'K3' => ...]
-    //chaque doublon : type, nom, exemplaires => [banque, categorie, favori, setlists => ["Set list 3 / 12 Nom", ...]]
+    //chaque doublon : type, nom, exemplaires => [banque, categorie, favori, setlists => [...], combis => [...] (Programs : Combis qui l utilisent)]
         $types = array_flip(Categorie::types());
         $ordreTypes = [$types['Program'] ?? 0 => 0, $types['Combi'] ?? 0 => 1];
         $resultat = [];
@@ -30,6 +30,18 @@ class Doublons
                   . " FROM " . Recherche::TABLE_SLOTS . " s JOIN " . Recherche::TABLE_SETLISTS . " sl ON sl.id = s.idSetlist"
                   . " WHERE sl.idFichier = ? AND s.banque IS NOT NULL ORDER BY sl.numero, s.numero", [$idFichier]) as $s) {
                 $slots[(int)$s['idType']][$s['banque']][] = "Set list " . $s['numeroSetlist'] . " " . $s['setlist'] . " / slot " . $s['numero'];
+            }
+
+            //Combis de ce Kronos qui utilisent chaque banque de Program : banque => ["U-B058 Nom (timbres 1, 2)", ...]
+            $combis = [];
+            foreach (Model::mdRequeteLister(
+                    "SELECT l.banqueProgram, l.banqueCombi, cb.nom, GROUP_CONCAT(l.timbre ORDER BY l.timbre SEPARATOR ', ') AS timbres"
+                  . " FROM " . Recherche::TABLE_LIENS . " l"
+                  . " LEFT JOIN " . Son::TABLE . " cb ON cb.idFichier = l.idFichier AND cb.banque = l.banqueCombi AND cb.idType = ?"
+                  . " WHERE l.idFichier = ? GROUP BY l.banqueProgram, l.banqueCombi, cb.nom ORDER BY l.banqueCombi",
+                    [$types['Combi'] ?? 0, $idFichier]) as $l) {
+                $combis[$l['banqueProgram']][] = $l['banqueCombi'] . " " . rtrim((string)$l['nom'])
+                                              . " (timbre" . (str_contains((string)$l['timbres'], ",") ? "s " : " ") . $l['timbres'] . ")";
             }
 
             //sons de ce Kronos regroupés par type et nom
@@ -50,6 +62,7 @@ class Doublons
                     'categorie' => $son['categorie'] === null ? "" : $son['categorie'] . " / " . $son['sousCategorie'],
                     'favori'    => (bool)$son['favori'],
                     'setlists'  => $slots[$idType][$son['banque']] ?? [],
+                    'combis'    => $idType === ($types['Program'] ?? 0) ? ($combis[$son['banque']] ?? []) : [],
                 ];
             }
             $doublons = array_values(array_filter($groupes, fn($g) => count($g['exemplaires']) > 1));

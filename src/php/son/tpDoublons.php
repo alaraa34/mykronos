@@ -11,7 +11,8 @@ ob_start(); ?>
 <section class="py-4">
     <h2 class="h4 mb-1">Sons en double sur mes Kronos</h2>
     <p class="small text-muted mb-3">Programs et Combis présents sous le même nom dans plusieurs banques d'un même Kronos
-        (dernier export importé). Un son présent sur K2 et sur K3 n'est pas compté.</p>
+        (dernier export importé). Un son présent sur K2 et sur K3 n'est pas compté.
+        Avant d'effacer un exemplaire, vérifie qu'aucune set list ni aucune Combi ne l'appelle.</p>
 
     <?php if (count($doublons) === 0): ?>
         <div class="alert alert-warning py-2">Aucun export de Kronos importé (fromK2 / fromK3).</div>
@@ -31,7 +32,7 @@ ob_start(); ?>
         <?php if (count($kronos['doublons']) > 0): ?>
         <div class="table-responsive">
         <table class="table table-sm mb-0 align-middle">
-            <thead><tr><th>Type</th><th>Nom</th><th>Banque</th><th>Catégorie</th><th>Set lists</th></tr></thead>
+            <thead><tr><th>Type</th><th>Nom</th><th>Banque</th><th>Catégorie</th><th>Set lists</th><th>Utilisé par les Combis</th></tr></thead>
             <tbody>
             <?php foreach ($kronos['doublons'] as $d):
                 $n = count($d['exemplaires']);
@@ -49,6 +50,11 @@ ob_start(); ?>
                     <td class="small">
                         <?php if (count($ex['setlists']) === 0): ?><span class="text-muted">—</span>
                         <?php else: ?><?= implode("<br>", array_map($e, $ex['setlists'])) ?><?php endif; ?>
+                    </td>
+                    <td class="small">
+                        <?php if ($d['type'] !== "Program"): ?>
+                        <?php elseif (count($ex['combis']) === 0): ?><span class="text-muted">—</span>
+                        <?php else: ?><?= implode("<br>", array_map($e, $ex['combis'])) ?><?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; endforeach; ?>
