@@ -10,7 +10,8 @@ $e = fn($valeur) => htmlspecialchars((string)$valeur);
 $libelles = [   //compteur => [libellé, couleur]
     'crees'     => ['Sons créés', 'success'],     'modifies' => ['Modifiés', 'primary'],
     'inchanges' => ['Inchangés', 'secondary'],    'supprimes' => ['Supprimés', 'danger'],
-    'combis'    => ['Combis composées', 'dark'],  'liens'     => ['Liens', 'dark'],
+    'combis'    => ['Combis composées', 'dark'],  'liens'     => ['Timbres', 'dark'],
+    'setlists'  => ['Set lists', 'info'],         'slots'     => ['Emplacements', 'info'],
 ];
 $fichiers  = $compteRendu['fichiers'];
 $reussis   = array_filter($fichiers, fn($f) => count($f['anomalies']) === 0);

@@ -11,7 +11,10 @@ function ctRechercherSon(): void {
     $idType      = (int)filter_input(INPUT_GET, 'type', FILTER_VALIDATE_INT);
     $saisie      = filter_input(INPUT_GET, 'typologie', FILTER_VALIDATE_INT);
     $idTypologie = is_int($saisie) ? $saisie : Recherche::SAUF_KRONOS;       //par défaut : tout sauf mes Kronos
-    $resultat    = Recherche::ajouterPresenceKronos(Recherche::rechercher($texte, $idType, $idTypologie));
+    $moteur      = (string)filter_input(INPUT_GET, 'moteur');
+    $favoris     = filter_input(INPUT_GET, 'favoris') === "1";
+    $resultat    = Recherche::ajouterPresenceKronos(Recherche::rechercher($texte, $idType, $idTypologie,
+                                                                         ['moteur' => $moteur, 'favoris' => $favoris]));
     $types       = Recherche::listeTypes();
     $typologies  = Recherche::listeTypologies();
     require('tpRecherche.php');
@@ -23,7 +26,8 @@ function ctRechercheCombinaison(): void {
     $texte       = trim((string)filter_input(INPUT_GET, 'q'));
     $saisie      = filter_input(INPUT_GET, 'typologie', FILTER_VALIDATE_INT);
     $idTypologie = is_int($saisie) ? $saisie : Recherche::SAUF_KRONOS;
-    $resultat    = Recherche::rechercherCombinaisons($texte, $idTypologie);
+    $favoris     = filter_input(INPUT_GET, 'favoris') === "1";
+    $resultat    = Recherche::rechercherCombinaisons($texte, $idTypologie, $favoris);
     $typologies  = Recherche::listeTypologies();
     require('tpRechercheCombinaison.php');
 }

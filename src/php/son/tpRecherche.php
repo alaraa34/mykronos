@@ -2,7 +2,7 @@
 namespace mykronos\src\php\son;
 /*******************************************************************************
  * Recherche de sons
- * Variables attendues : $texte, $idType, $idTypologie, $resultat, $types, $typologies
+ * Variables attendues : $texte, $idType, $idTypologie, $moteur, $favoris, $resultat, $types, $typologies
  ******************************************************************************/
 use shared\php\toolbox\Toolbox_adressage as TbAdressage;
 use shared\php\classes\socle\Menu        as Menu;
@@ -25,7 +25,7 @@ ob_start(); ?>
         <input type="hidden" name="<?= Menu::FONCTION ?>" value="rechercherSon">
         <input type="hidden" name="<?= Menu::DOMAINE ?>" value="son">
         <input type="hidden" name="<?= Menu::CONTROLEUR ?>" value="recherche">
-        <div class="col-12 col-md-6">
+        <div class="col-12 col-md-3">
             <label class="form-label small mb-1" for="q">Nom, catégorie ou sous-catégorie</label>
             <input type="search" class="form-control" id="q" name="q" value="<?= $e($texte) ?>"
                    placeholder="ex : brass stab, e.piano, pad" autofocus>
@@ -50,15 +50,31 @@ ob_start(); ?>
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-12 col-md-2">
-            <button type="submit" class="btn btn-dark w-100"><i class="bi bi-search"></i> Rechercher</button>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1" for="moteur">Moteur (Programs)</label>
+            <select class="form-select" id="moteur" name="moteur">
+                <option value="">Tous</option>
+                <?php foreach (Recherche::MOTEURS as $code => $libelle): ?>
+                    <option value="<?= $e($code) ?>" <?= $code === $moteur ? 'selected' : '' ?>><?= $e($libelle) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-6 col-md-2 d-flex align-items-end">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="favoris" name="favoris" value="1" <?= $favoris ? 'checked' : '' ?>>
+                <label class="form-check-label small" for="favoris"><i class="bi bi-star-fill favori"></i> Favoris</label>
+            </div>
+        </div>
+        <div class="col-12 col-md-1">
+            <button type="submit" class="btn btn-dark w-100" title="Rechercher"><i class="bi bi-search"></i></button>
         </div>
     </form>
 
-    <?php if ($texte === ""): ?>
-        <p class="text-muted">Tape un ou plusieurs mots : chaque mot doit apparaître dans le nom du son, sa catégorie ou sa sous-catégorie.</p>
+    <?php if ($texte === "" && !$favoris): ?>
+        <p class="text-muted">Tape un ou plusieurs mots : chaque mot doit apparaître dans le nom du son, sa catégorie ou sa sous-catégorie.
+            Sans mot, coche <i class="bi bi-star-fill favori"></i> Favoris pour lister tes favoris.</p>
     <?php elseif (count($resultat['sons']) === 0): ?>
-        <p class="text-muted">Aucun son trouvé pour « <?= $e($texte) ?> ».</p>
+        <p class="text-muted">Aucun son trouvé<?= $texte !== "" ? " pour « " . $e($texte) . " »" : "" ?>.</p>
     <?php else: ?>
         <p class="small">
             <?= count($resultat['sons']) ?> son<?= count($resultat['sons']) > 1 ? 's' : '' ?>
@@ -75,7 +91,8 @@ ob_start(); ?>
             <?php foreach ($resultat['sons'] as $son): $estCombi = $son['type'] === 'Combi'; $idLiens = 'liens-' . (int)$son['id']; ?>
                 <tr>
                     <td>
-                        <div class="fw-semibold"><?= $surligner((string)$son['nom']) ?></div>
+                        <div class="fw-semibold"><?php if ((int)$son['favori'] === 1): ?><i class="bi bi-star-fill favori" title="Favori sur le Kronos"></i> <?php endif; ?><?= $surligner((string)$son['nom']) ?></div>
+                        <?php include('tpInfosSon.php'); ?>
                     </td>
                     <td><span class="badge text-bg-<?= $couleurs[$son['type']] ?? 'secondary' ?>"><?= $e($son['type']) ?></span></td>
                     <td class="text-nowrap"><?= $e($son['banque']) ?></td>

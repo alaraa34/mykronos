@@ -13,11 +13,14 @@ namespace mykronos\src\php\fichier;
  *   WSQ1 > WBK1       Wave Sequences          DKT1 > DBK1  Drum Kits
  *   DPI1 > DPN1/DPD1  Drum Patterns           CMB2         banque/program des timbres (OS 1.5/1.6)
  *   GLB1              réglages globaux, dont les noms des catégories (PCG enregistré avec le Global)
+ *   SLS1 > SBK1       set lists : 128 listes de 128 emplacements (nom, son pointé, volume, description)
  * Les emplacements vides ou "Init ..." sont écartés (comme PCG Tools).
  *
  * Utilisation : $contenu = LecteurPcg::lire($chemin);
- *   ['modele' => 'Kronos', 'os' => '3.x', 'sons' => [ ['type','banque','nom','categorie','sousCategorie'], ...],
- *    'compositions' => [ 'U-B000' => ['U-AA000', ...], ... ],
+ *   ['modele' => 'Kronos', 'os' => '3.x',
+ *    'sons' => [ ['type','banque','nom','categorie','sousCategorie','favori','moteur','tempo'], ...],
+ *    'compositions' => [ 'U-B000' => [ ['timbre','banque','canal','noteBasse','noteHaute','velociteBasse','velociteHaute','volume'], ...], ... ],
+ *    'setlists' => [ ['numero','nom','slots' => [ ['numero','nom','type','banque','volume','description'], ...]], ...],
  *    'categories' => null (pas de Global) ou ['Program' => [n° => ['libelle' => .., 'sous' => [n° => libellé]]], 'Combi' => [...]] ]
  ******************************************************************************/
 class LecteurPcg
@@ -37,8 +40,12 @@ class LecteurPcg
     //  categorieProgram / categorieCombi : octet catégorie (bits 0-4) et sous-catégorie (bits 5-7)
     //  timbres : position des 16 timbres dans une combi, timbre : taille d'un timbre
     private const MODELES = [
-        0x68 => ['nom' => "Kronos", 'categorieProgram' => 2568, 'categorieCombi' => 4790, 'timbres' => 4802, 'timbre' => 188],
-        0x70 => ['nom' => "OASYS",  'categorieProgram' => 2556, 'categorieCombi' => 4778, 'timbres' => 4790, 'timbre' => 186],
+    //  favoriProgram / favoriCombi : [octet, bit] (null : pas de favori), tempo : mot de 2 octets (poids faible d'abord) / 100
+    //  modeOsc : [octet, masque] du mode d'oscillateur du Program (Single, Double, Drums, EXi, -, Double Drums)
+        0x68 => ['nom' => "Kronos", 'categorieProgram' => 2568, 'categorieCombi' => 4790, 'timbres' => 4802, 'timbre' => 188,
+                 'favoriProgram' => [2558, 5], 'favoriCombi' => [4791, 0], 'tempo' => 1304, 'modeOsc' => [2558, 0x07]],
+        0x70 => ['nom' => "OASYS",  'categorieProgram' => 2556, 'categorieCombi' => 4778, 'timbres' => 4790, 'timbre' => 186,
+                 'favoriProgram' => null, 'favoriCombi' => null, 'tempo' => null, 'modeOsc' => [2546, 0x03]],
     ];
     private const NB_PROGRAMS_BANQUE = 128;
     //noms des catégories dans le bloc GLB1 : Programs (18 catégories puis 18 x 8 sous-catégories), puis Combis
@@ -46,6 +53,26 @@ class LecteurPcg
     private const NB_CATEGORIES      = 18;
     private const NB_SOUS_CATEGORIES = 8;
     private const STATUTS_UTILISES  = [1, 2];   //statut du timbre : 0 Off, 1 Int, 2 Both, 3 Ext, 4 Ex2
+    //timbre : position de la zone de clavier et de la plage de vélocité
+    private const TIMBRE_NOTE_HAUTE = 37;
+    private const TIMBRE_NOTE_BASSE = 38;
+    private const TIMBRE_VELO_HAUTE = 40;
+    private const TIMBRE_VELO_BASSE = 41;
+    //set lists (Kronos) : emplacement = nom (24), type (+24, bits 0-1), banque (+25, bits 0-4), n° (+26),
+    //volume (+28), description (+30, 512 caractères)
+    private const SLOTS_PAR_SETLIST = 128;
+    private const TYPES_SLOT        = [0 => "Combi", 1 => "Program", 2 => "Song"];
+    //moteur d'un Program selon son mode d'oscillateur : HD-1 (échantillons) ou EXi (moteurs modélisés : SGX-2, AL-1, CX-3...)
+    private const MOTEURS           = [0 => "HD-1 Single", 1 => "HD-1 Double", 2 => "HD-1 Drums", 3 => "EXi", 5 => "HD-1 Double Drums"];
+    //timbre : canal MIDI (+2, bits 0-4 : 0-15, 16 = Gch) et volume (+5)
+    private const TIMBRE_CANAL      = 2;
+    private const TIMBRE_VOLUME     = 5;
+    //banque du son appelé par un emplacement de set list (Program) : vérifié sur mes exports K2 / K3
+    //0-5 I-A..I-F, 6-12 U-A..U-G (n° de banque), 17-23 U-A..U-G et 24-30 U-AA..U-GG (identifiants PCG)
+    private const SLOT_BANQUE_PROGRAM = [0 => "I-A", 1 => "I-B", 2 => "I-C", 3 => "I-D", 4 => "I-E", 5 => "I-F",
+                                         6 => "U-A", 7 => "U-B", 8 => "U-C", 9 => "U-D", 10 => "U-E", 11 => "U-F", 12 => "U-G",
+                                         17 => "U-A", 18 => "U-B", 19 => "U-C", 20 => "U-D", 21 => "U-E", 22 => "U-F", 23 => "U-G",
+                                         24 => "U-AA", 25 => "U-BB", 26 => "U-CC", 27 => "U-DD", 28 => "U-EE", 29 => "U-FF", 30 => "U-GG"];
 
     //banques (index PCG Tools => nom)
     private const BANQUES_PROGRAM = ["I-A", "I-B", "I-C", "I-D", "I-E", "I-F", "U-A", "U-B", "U-C", "U-D",
@@ -72,6 +99,7 @@ class LecteurPcg
     private array $combisParBanque = [];        //nom banque => nombre de combis (pour CMB2)
     private array $cbk2 = [];                   //position des données CBK2 par banque (OS 1.5/1.6)
     private int $global = 0;                    //position des données du bloc GLB1 (0 : absent)
+    private int $sls1 = 0;                      //position du bloc SLS1 (0 : absent)
 
     public static function lire(string $chemin): array {
         $donnees = @file_get_contents($chemin);
@@ -109,11 +137,13 @@ class LecteurPcg
                 "DPI1"  => $this->lireDpi1($taille),
                 "INI3"  => $this->ini3($taille),
                 "GLB1"  => $this->lireGlb1($taille),
+                "SLS1"  => $this->reperer($taille),
                 default => $this->i += $taille + self::ECART_BLOC,
             };
         }
         return ['modele' => $this->modele['nom'], 'os' => $this->os,
-                'sons' => $this->sons, 'compositions' => $this->compositions(), 'categories' => $this->categories()];
+                'sons' => $this->sons, 'compositions' => $this->compositions(), 'categories' => $this->categories(),
+                'setlists' => $this->setlists()];
     }
 
     //----------------------------------------------------------------------------------------------
@@ -144,7 +174,10 @@ class LecteurPcg
             for ($n = 0; $n < $nombre; $n++, $this->i += $tailleSon) {
                 $nom = $this->nom($this->i);
                 if ($nom === "" || (str_contains($nom, "Init") && str_contains($nom, "Prog"))) {continue;}
-                $this->ajouterSon(self::PROGRAM, $banque, $n, $nom, ord($this->d[$this->i + $this->modele['categorieProgram']]));
+                [$octet, $masque] = $this->modele['modeOsc'];
+                $this->ajouterSon(self::PROGRAM, $banque, $n, $nom, ord($this->d[$this->i + $this->modele['categorieProgram']]),
+                                  ['favori' => $this->bit($this->i, $this->modele['favoriProgram']),
+                                   'moteur' => self::MOTEURS[ord($this->d[$this->i + $octet]) & $masque] ?? null]);
             }
         }
     }
@@ -176,7 +209,10 @@ class LecteurPcg
         for ($n = 0; $n < $nombre; $n++, $this->i += $tailleSon) {
             $nom = $this->nom($this->i);
             if ($nom === "" || (str_contains($nom, "Init") && str_contains($nom, "Combi"))) {continue;}
-            $this->ajouterSon(self::COMBI, $banque, $n, $nom, ord($this->d[$this->i + $this->modele['categorieCombi']]));
+            $tempo = $this->modele['tempo'] === null ? null
+                   : (ord($this->d[$this->i + $this->modele['tempo']]) + 256 * ord($this->d[$this->i + $this->modele['tempo'] + 1])) / 100;
+            $this->ajouterSon(self::COMBI, $banque, $n, $nom, ord($this->d[$this->i + $this->modele['categorieCombi']]),
+                              ['favori' => $this->bit($this->i, $this->modele['favoriCombi']), 'tempo' => $tempo]);
             $this->combis[] = [$banque, $n, $this->i];
         }
     }
@@ -240,6 +276,12 @@ class LecteurPcg
         $this->i = $fin;
     }
 
+    private function reperer(int $taille): void {
+    //SLS1 : lu à la fin (set lists), on retient sa position
+        $this->sls1 = $this->i;
+        $this->i += $taille + self::ECART_BLOC;
+    }
+
     private function lireGlb1(int $taille): void {
         $this->global = $this->i + self::ECART_BLOC;
         $this->i += $taille + self::ECART_BLOC;
@@ -270,10 +312,55 @@ class LecteurPcg
     }
 
     //----------------------------------------------------------------------------------------------
+    // SET LISTS (bloc SLS1 > SBK1, Kronos)
+    //----------------------------------------------------------------------------------------------
+    private function setlists(): array {
+    //set lists ayant au moins un emplacement renseigné (nom ou description) ; seuls ces emplacements sont retournés
+        if ($this->sls1 === 0 || $this->modele['nom'] !== "Kronos" || $this->os === "1.5/1.6") {return [];}
+        $p = $this->sls1 + 16;
+        $p += $this->entier($p) + 8;                    //SDB1
+        $p += 12;                                       //début STL1
+        if (substr($this->d, $p, 4) !== "SBK1") {return [];}
+        $p += 12;
+        $nombre = $this->entier($p);
+        $tailleSlot = $nombre > 0 ? intdiv($this->entier($p + 4), $nombre) : 0;
+        $p += 12;
+        $setlists = [];
+        for ($s = 0; $s < $nombre && $tailleSlot > 0; $s++) {
+            $nomListe = $this->nom($p);
+            $p += self::TAILLE_NOM;
+            $slots = [];
+            for ($k = 0; $k < self::SLOTS_PAR_SETLIST; $k++) {
+                $o = $p + $k * $tailleSlot;
+                $nom = $this->nom($o);
+                $description = $this->texte($o + 30, 512);
+                if ($nom === "" && $description === "") {continue;}
+                $type = self::TYPES_SLOT[ord($this->d[$o + 24]) & 0x03] ?? null;
+                $idBanque = ord($this->d[$o + 25]) & 0x1F;
+                $numero = ord($this->d[$o + 26]);
+                $banque = match ($type) {
+                    "Program" => isset(self::SLOT_BANQUE_PROGRAM[$idBanque]) ? self::SLOT_BANQUE_PROGRAM[$idBanque] . sprintf("%03d", $numero) : null,
+                    "Combi"   => isset(self::BANQUES_COMBI[$idBanque]) ? self::BANQUES_COMBI[$idBanque] . sprintf("%03d", $numero) : null,
+                    default   => null,
+                };
+                $slots[] = ['numero' => $k, 'nom' => $nom, 'type' => $type, 'banque' => $banque,
+                            'volume' => ord($this->d[$o + 28]),
+                            'description' => $description];
+            }
+            $p += self::SLOTS_PAR_SETLIST * $tailleSlot + 16;
+            if (count($slots) > 0) {
+                $setlists[] = ['numero' => $s, 'nom' => $nomListe, 'slots' => $slots];
+            }
+        }
+        return $setlists;
+    }
+
+    //----------------------------------------------------------------------------------------------
     // COMPOSITION DES COMBIS
     //----------------------------------------------------------------------------------------------
     private function compositions(): array {
-    //banque combi => banques des programs utilisés par les timbres actifs (statut Int ou Both, non muets), sans doublon
+    //banque combi => timbres actifs (statut Int ou Both, non muets) : n° de timbre (1 à 16), banque du program,
+    //canal MIDI (1 à 16, 17 = Gch), zone de clavier (notes MIDI), plage de vélocité et volume
     //un timbre qui pointe vers une banque inconnue ou un n° hors banque (255 = aucun) est ignoré
         $compositions = [];
         foreach ($this->combis as [$banque, $n, $position]) {
@@ -285,9 +372,16 @@ class LecteurPcg
                 if ($muet || !in_array($statut, self::STATUTS_UTILISES, true)) {continue;}
                 [$idBanque, $numero] = $this->programDuTimbre($banque, $n, $t, $timbre);
                 if (!isset(self::PCGID_PROGRAM[$idBanque]) || $numero >= self::NB_PROGRAMS_BANQUE) {continue;}
-                $programs[] = self::PCGID_PROGRAM[$idBanque] . sprintf("%03d", $numero);
+                $programs[] = ['timbre'        => $t + 1,
+                               'banque'        => self::PCGID_PROGRAM[$idBanque] . sprintf("%03d", $numero),
+                               'canal'         => (ord($this->d[$timbre + self::TIMBRE_CANAL]) & 0x1F) + 1,
+                               'noteBasse'     => ord($this->d[$timbre + self::TIMBRE_NOTE_BASSE]),
+                               'noteHaute'     => ord($this->d[$timbre + self::TIMBRE_NOTE_HAUTE]),
+                               'velociteBasse' => ord($this->d[$timbre + self::TIMBRE_VELO_BASSE]),
+                               'velociteHaute' => ord($this->d[$timbre + self::TIMBRE_VELO_HAUTE]),
+                               'volume'        => ord($this->d[$timbre + self::TIMBRE_VOLUME]) & 0x7F];
             }
-            $compositions[$banque . sprintf("%03d", $n)] = array_values(array_unique($programs));
+            $compositions[$banque . sprintf("%03d", $n)] = $programs;
         }
         return $compositions;
     }
@@ -306,10 +400,24 @@ class LecteurPcg
     //----------------------------------------------------------------------------------------------
     // OUTILS
     //----------------------------------------------------------------------------------------------
-    private function ajouterSon(string $type, string $banque, int $n, string $nom, ?int $octetCategorie): void {
+    private function ajouterSon(string $type, string $banque, int $n, string $nom, ?int $octetCategorie, array $plus = []): void {
         $this->sons[] = ['type' => $type, 'banque' => $banque . sprintf("%03d", $n), 'nom' => $nom,
                          'categorie'     => $octetCategorie === null ? null : $octetCategorie & 0x1F,
-                         'sousCategorie' => $octetCategorie === null ? null : ($octetCategorie >> 5) & 0x07];
+                         'sousCategorie' => $octetCategorie === null ? null : ($octetCategorie >> 5) & 0x07,
+                         'favori' => $plus['favori'] ?? false, 'moteur' => $plus['moteur'] ?? null, 'tempo' => $plus['tempo'] ?? null];
+    }
+
+    private function bit(int $position, ?array $octetBit): bool {
+    //bit [octet, n° de bit] à partir de $position (false si le modèle ne le gère pas)
+        return $octetBit !== null && ((ord($this->d[$position + $octetBit[0]]) >> $octetBit[1]) & 1) === 1;
+    }
+
+    private function texte(int $position, int $longueur): string {
+    //texte libre (description d'emplacement) : jusqu'au premier caractère nul, fins de ligne conservées
+        $brut = substr($this->d, $position, $longueur);
+        $fin = strpos($brut, "\0");
+        $texte = rtrim($fin === false ? $brut : substr($brut, 0, $fin));
+        return mb_convert_encoding($texte, "UTF-8", "ISO-8859-1");
     }
 
     private function nomBanqueProgram(int $id): string {

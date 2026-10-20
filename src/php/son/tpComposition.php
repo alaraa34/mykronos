@@ -1,7 +1,7 @@
 <?php
 namespace mykronos\src\php\son;
 /*******************************************************************************
- * Fragment : composition d'une combi (programs, banque d'origine, banques sur K2 / K3)
+ * Fragment : composition d'une combi (timbres : program, zone de clavier, vélocité, banque d'origine, banques sur K2 / K3)
  * Inclus par tpRecherche et tpRechercheCombinaison
  * Variables attendues : $combi (avec 'programs', voir Recherche::ajouterPresenceKronos), $resultat (avec 'kronos')
  ******************************************************************************/
@@ -20,18 +20,28 @@ $presenceKronos ??= function (array $kronos, string $machine) use ($resultat, $e
 };
 ?>
 <div class="ms-3 ps-3 border-start border-3 border-success">
-    <div class="small fw-semibold mb-1">Programs qui composent « <?= $e($combi['nom']) ?> »</div>
+    <div class="small fw-semibold mb-1">Programs qui composent « <?= $e($combi['nom']) ?> »
+        <?php if (($combi['disposition'] ?? '') !== ''): ?><span class="badge text-bg-dark ms-1"><?= $e($combi['disposition']) ?></span><?php endif; ?></div>
     <table class="table table-sm table-borderless small mb-1">
         <thead>
-            <tr class="text-muted"><th>Program</th><th>Catégorie</th><th>PCG d'origine</th>
+            <tr class="text-muted"><th class="text-center">T</th><th>Program</th><th>Catégorie</th><th class="text-center">Canal</th><th>Clavier</th><th>Vélocité</th><th class="text-center">Vol.</th><th>PCG d'origine</th>
                 <?php foreach ($machinesKronos as $m): ?><th class="text-center"><?= $m ?></th><?php endforeach; ?></tr>
         </thead>
         <tbody>
         <?php foreach ($combi['programs'] as $p): ?>
             <tr>
+                <td class="text-center text-muted"><?= $p['timbre'] > 0 ? (int)$p['timbre'] : '' ?></td>
                 <td class="fw-semibold"><?= $p['nom'] !== null ? $e($p['nom']) : '<span class="fst-italic text-muted fw-normal">nom inconnu</span>' ?>
                     <?php if ($p['nom'] !== null && !$p['origine']): ?><span class="badge text-bg-light border fw-normal" title="Program d'usine : nom repris de l'export du Kronos">usine</span><?php endif; ?></td>
                 <td class="text-muted"><?= $e($p['categorie']) ?></td>
+                <td class="text-center text-muted"><?= ($p['canal'] ?? null) === null ? '' : ((int)$p['canal'] === 17 ? 'Gch' : (int)$p['canal']) ?></td>
+                <td class="text-nowrap"><?php if ($p['zone'][0] !== null): ?>
+                    <?= ($p['zone'][0] == 0 && $p['zone'][1] == 127) ? '<span class="text-muted">tout</span>'
+                        : $e(Recherche::nomNote((int)$p['zone'][0]) . ' – ' . Recherche::nomNote((int)$p['zone'][1])) ?><?php endif; ?></td>
+                <td class="text-nowrap"><?php if ($p['velocite'][0] !== null): ?>
+                    <?= ($p['velocite'][0] <= 1 && $p['velocite'][1] == 127) ? '<span class="text-muted">tout</span>'
+                        : (int)$p['velocite'][0] . ' – ' . (int)$p['velocite'][1] ?><?php endif; ?></td>
+                <td class="text-center text-muted"><?= ($p['volume'] ?? null) === null ? '' : (int)$p['volume'] ?></td>
                 <td class="text-nowrap"><?= $e($p['banque']) ?></td>
                 <?php foreach ($machinesKronos as $m): ?><td class="text-center"><?= $presenceKronos($p['kronos'], $m) ?></td><?php endforeach; ?>
             </tr>

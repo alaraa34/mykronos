@@ -20,3 +20,11 @@
 .traitement-en-cours.d-none { display: none !important; }
 .traitement-boite { background: #fff; color: #2b2d30; border-radius: .5rem; padding: 1.25rem 2rem; text-align: center;
                     box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .25); }
+
+/* recherche : favori, moteur, set lists */
+.favori { color: #e0a800; }
+.badge.moteur { background-color: #fff; color: #2b2d30; border: 1px solid #2b2d30; font-weight: 500; }
+.setlists-son { color: #495057; }
+
+/* set lists : descriptions sur plusieurs lignes (notes d'accords) */
+.description-slot { white-space: pre-line; min-width: 16rem; color: #495057; }

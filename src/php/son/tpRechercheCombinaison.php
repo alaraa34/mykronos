@@ -2,7 +2,7 @@
 namespace mykronos\src\php\son;
 /*******************************************************************************
  * Recherche de combinaisons : composition et banques sur le PCG d'origine, le K2 et le K3
- * Variables attendues : $texte, $idTypologie, $resultat (avec 'kronos'), $typologies
+ * Variables attendues : $texte, $idTypologie, $favoris, $resultat (avec 'kronos'), $typologies
  ******************************************************************************/
 use shared\php\toolbox\Toolbox_adressage as TbAdressage;
 use shared\php\classes\socle\Menu        as Menu;
@@ -35,7 +35,7 @@ ob_start(); ?>
         <input type="hidden" name="<?= Menu::FONCTION ?>" value="rechercheCombinaison">
         <input type="hidden" name="<?= Menu::DOMAINE ?>" value="son">
         <input type="hidden" name="<?= Menu::CONTROLEUR ?>" value="recherche">
-        <div class="col-12 col-md-7">
+        <div class="col-12 col-md-5">
             <label class="form-label small mb-1" for="q">Nom, catégorie ou sous-catégorie de la combi</label>
             <input type="search" class="form-control" id="q" name="q" value="<?= $e($texte) ?>" placeholder="ex : walk of life, orchestral" autofocus>
         </div>
@@ -50,16 +50,22 @@ ob_start(); ?>
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-4 col-md-2">
+        <div class="col-6 col-md-2 d-flex align-items-end">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="favoris" name="favoris" value="1" <?= $favoris ? 'checked' : '' ?>>
+                <label class="form-check-label small" for="favoris"><i class="bi bi-star-fill favori"></i> Favoris</label>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
             <button type="submit" class="btn btn-dark w-100"><i class="bi bi-search"></i> Rechercher</button>
         </div>
     </form>
 
-    <?php if ($texte === ""): ?>
+    <?php if ($texte === "" && !$favoris): ?>
         <p class="text-muted">Tape un ou plusieurs mots. Pour chaque combi, le bouton <i class="bi bi-diagram-3"></i> montre ses programs
             et leur banque dans le PCG d'origine, sur le K2 et sur le K3.</p>
     <?php elseif (count($resultat['sons']) === 0): ?>
-        <p class="text-muted">Aucune combinaison trouvée pour « <?= $e($texte) ?> ».</p>
+        <p class="text-muted">Aucune combinaison trouvée<?= $texte !== "" ? " pour « " . $e($texte) . " »" : "" ?>.</p>
     <?php else: ?>
         <p class="small">
             <?= count($resultat['sons']) ?> combinaison<?= count($resultat['sons']) > 1 ? 's' : '' ?>
@@ -77,8 +83,9 @@ ob_start(); ?>
             <tbody>
             <?php foreach ($resultat['sons'] as $combi): $idCompo = 'compo-' . (int)$combi['id']; ?>
                 <tr>
-                    <td class="fw-semibold"><?= $surligner((string)$combi['nom']) ?>
-                        <div class="small text-muted fw-normal"><?= $e($combi['fichier']) ?></div></td>
+                    <td class="fw-semibold"><?php if ((int)$combi['favori'] === 1): ?><i class="bi bi-star-fill favori" title="Favori sur le Kronos"></i> <?php endif; ?><?= $surligner((string)$combi['nom']) ?>
+                        <div class="small text-muted fw-normal"><?= $e($combi['fichier']) ?></div>
+                        <div class="fw-normal"><?php $son = $combi; include('tpInfosSon.php'); ?></div></td>
                     <td class="text-nowrap"><?= $e($combi['banque']) ?></td>
                     <td class="small"><?php if ($combi['categorie'] !== null): ?><?= $surligner((string)$combi['categorie']) ?><br>
                         <span class="text-muted"><?= $surligner((string)$combi['sousCategorie']) ?></span><?php endif; ?></td>
