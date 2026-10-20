@@ -7,13 +7,16 @@
 #fichiersATraiter tr.fichier-exclus td { opacity: .45; }
 #fichiersATraiter tr.fichier-exclus td:nth-last-child(2) { opacity: 1; }
 
-/* édition des catégories */
-input.numero { width: 5rem; }
-select.fusion { min-width: 11rem; }
-
 /* recherche : provenance (sonsK2+, sonsK3+ = banques de sons ; fromK2, fromK3 = exports de mes Kronos) */
 .badge.provenance { background-color: #e9ecef; color: #2b2d30; border: 1px solid #adb5bd; }
 .badge.provenance-kronos { background-color: #2b2d30; color: #fff; border-color: #2b2d30; }
 
 /* recherche : composition d'une combi / combis d'un program, sans fond rayé */
 #resultatsRecherche tr.ligne-liens > td { background-color: #f8f9fa; }
+
+/* indicateur "traitement en cours" */
+.traitement-en-cours { position: fixed; inset: 0; z-index: 2000; background: rgba(43, 45, 48, .35);
+                       display: flex; align-items: center; justify-content: center; }
+.traitement-en-cours.d-none { display: none !important; }
+.traitement-boite { background: #fff; color: #2b2d30; border-radius: .5rem; padding: 1.25rem 2rem; text-align: center;
+                    box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .25); }

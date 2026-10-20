@@ -34,8 +34,12 @@ function ctChargerCategoriesKronos(int $id = 0): void {
             return;
         }
         $r = Categorie::chargerDepuisKronos($categories);
-        ctEditerCategories(0, "Catégories du Kronos chargées : " . $r['creees'] . " créées, " . $r['renommees']
-                            . " renommées, " . $r['inchangees'] . " inchangées");
+        $message = "Catégories du Kronos chargées : " . $r['creees'] . " créées, " . $r['renommees'] . " renommées, "
+                 . $r['inchangees'] . " inchangées, " . $r['supprimees'] . " supprimées (absentes du Kronos)";
+        if (count($r['conservees']) > 0) {
+            $message .= " - conservées car elles contiennent des sons : " . implode(", ", $r['conservees']);
+        }
+        ctEditerCategories(0, $message, count($r['conservees']) === 0);
     } catch (\Throwable $e) {
         error_log("ctChargerCategoriesKronos : " . $e->getMessage());
         ctEditerCategories(0, "Chargement impossible : " . $e->getMessage(), false);
@@ -57,7 +61,7 @@ function pcgKronos(): array {
 }
 
 function ctEnregistrerCategories(int $id = 0): void {
-    [$message, $succes] = messageEnregistrement(Categorie::enregistrer(Categorie::RACINE, lignesSaisies(), $id));
+    [$message, $succes] = messageEnregistrement(Categorie::renommer(Categorie::RACINE, lignesSaisies(), $id));
     ctEditerCategories($id, $message, $succes);
 }
 
@@ -80,23 +84,21 @@ function ctEditerSsCategories(int $id = 0, string $message = "", bool $succes = 
 }
 
 function ctEnregistrerSsCategories(int $id = 0): void {
-    [$message, $succes] = messageEnregistrement(Categorie::enregistrer($id, lignesSaisies()));
+    [$message, $succes] = messageEnregistrement(Categorie::renommer($id, lignesSaisies()));
     ctEditerSsCategories($id, $message, $succes);
 }
 
 function lignesSaisies(): array {
-//lignes[id][numero|libelle|fusion|type] du formulaire
+//lignes[id][libelle] du formulaire
     $lignes = $_POST['lignes'] ?? [];
     return is_array($lignes) ? array_filter($lignes, 'is_array') : [];
 }
 
 function messageEnregistrement(array $resultat): array {
-//[message, succès] après enregistrement
+//[message, succès] après enregistrement des libellés
     if (count($resultat['erreurs']) > 0) {
         return ["Rien n'a été enregistré : " . implode(" ; ", $resultat['erreurs']), false];
     }
-    $parties = [];
-    if ($resultat['fusions'] > 0) {$parties[] = $resultat['fusions'] . " fusion" . ($resultat['fusions'] > 1 ? "s" : "");}
-    if ($resultat['modifies'] > 0) {$parties[] = $resultat['modifies'] . " ligne" . ($resultat['modifies'] > 1 ? "s" : "") . " modifiée" . ($resultat['modifies'] > 1 ? "s" : "");}
-    return [count($parties) > 0 ? implode(", ", $parties) : "Aucune modification", true];
+    $n = $resultat['modifies'];
+    return [$n === 0 ? "Aucune modification" : $n . " libellé" . ($n > 1 ? "s" : "") . " enregistré" . ($n > 1 ? "s" : ""), true];
 }

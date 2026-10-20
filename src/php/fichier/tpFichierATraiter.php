@@ -16,7 +16,7 @@ ob_start(); ?>
 <section class="py-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <h2 class="h4 mb-0">Fichiers à traiter <span class="badge text-bg-secondary"><?= count($fichiers) ?></span></h2>
-        <a class="btn btn-dark btn-sm" href="<?= TbAdressage::getURLstatic('fichier', 'importerPcg', 0, 'son') ?>">
+        <a class="btn btn-dark btn-sm" data-attente="Import des PCG en cours…" href="<?= TbAdressage::getURLstatic('fichier', 'importerPcg', 0, 'son') ?>">
             <i class="bi bi-box-arrow-in-down"></i> Importer tous les PCG à traiter
         </a>
     </div>
@@ -53,7 +53,7 @@ ob_start(); ?>
                 </td>
                 <td class="text-center text-nowrap">
                     <a class="btn btn-outline-dark btn-sm bouton-action<?= $exclus ? ' disabled' : '' ?>"
-                       title="Importer <?= $e($f['libelle']) ?>"
+                       title="Importer <?= $e($f['libelle']) ?>" data-attente="Import de <?= $e($f['libelle']) ?>…"
                        <?= $exclus ? 'aria-disabled="true" tabindex="-1"' : '' ?>
                        href="<?= TbAdressage::getURLstatic('fichier', 'importerPcgFichier', (int)$f['id'], 'son') ?>">
                         <i class="bi bi-box-arrow-in-down"></i>

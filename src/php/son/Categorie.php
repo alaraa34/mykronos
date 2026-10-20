@@ -8,6 +8,7 @@ namespace mykronos\src\php\son;
  *                     idType = Program ou Combi (nomenclature TYPE) : chaque type a sa propre liste
  *  - sous-catégorie : idCategorie = id du parent,  idPersonalise = n° de sous-catégorie,
  *                     idType non renseigné (c'est celui de la catégorie parente)
+ * La table est alimentée par le Global d'un PCG de mon Kronos (chargerDepuisKronos) ; seuls les libellés se modifient à l'écran.
  ******************************************************************************/
 use shared\php\database\Model                       as Model;
 use shared\php\database\Database                    as Database;
@@ -20,9 +21,6 @@ class Categorie
     public const LIBELLE_CATEGORIE      = "Catégorie à renseigner";
     public const LIBELLE_SSCATEGORIE    = "Sous catégorie à renseigner";
     public const LONGUEUR_LIBELLE       = 50;                           //varchar(50) de la table
-    public const SANS_NUMERO            = -1;                           //catégorie sans n° Kronos
-    public const NUMERO_MAX_CATEGORIE   = 17;                           //Kronos : catégories 0 à 17
-    public const NUMERO_MAX_SSCATEGORIE = 7;                            //sous-catégories 0 à 7
     public const TYPES_AVEC_CATEGORIE   = ["Program", "Combi"];         //valeurA de la nomenclature TYPE
 
     private static array $cache = [];                                   //"idType/idParent/numero" => id
@@ -64,26 +62,52 @@ class Categorie
     }
 
     public static function chargerDepuisKronos(array $categories): array {
-    //met la table à jour avec les catégories lues dans le Global d'un PCG (LecteurPcg::lire()['categories'])
-    //pour chaque type, n° de catégorie et n° de sous-catégorie : libellé mis à jour, ou ligne créée
-    //les anciennes lignes sans n° (-1) ne sont pas touchées : elles se fusionnent ensuite à l'écran
-    //retourne ['creees' => n, 'renommees' => n, 'inchangees' => n]
-        $resultat = ['creees' => 0, 'renommees' => 0, 'inchangees' => 0];
+    //met la table à l'image des catégories lues dans le Global d'un PCG (LecteurPcg::lire()['categories'])
+    //  - pour chaque type, n° de catégorie et n° de sous-catégorie : libellé mis à jour, ou ligne créée
+    //  - les lignes qui n'existent pas sur le Kronos (sans n°, autre type...) sont supprimées si aucun son n'y est rangé,
+    //    conservées sinon (signalées dans 'conservees')
+    //retourne ['creees' => n, 'renommees' => n, 'inchangees' => n, 'supprimees' => n, 'conservees' => [libellés]]
+        $resultat = ['creees' => 0, 'renommees' => 0, 'inchangees' => 0, 'supprimees' => 0, 'conservees' => []];
         $types = array_flip(self::types());                         //Program / Combi => id
         Model::mdTransaction(function () use ($categories, $types, &$resultat): bool {
+            $gardees = [];
             foreach ($categories as $nomType => $liste) {
                 if (!isset($types[$nomType])) {continue;}
                 foreach ($liste as $numero => $categorie) {
                     $idCategorie = self::poser($types[$nomType], self::RACINE, (int)$numero, $categorie['libelle'], $resultat);
+                    $gardees[$idCategorie] = true;
                     foreach ($categorie['sous'] as $numeroSous => $libelle) {
-                        self::poser($types[$nomType], $idCategorie, (int)$numeroSous, $libelle, $resultat);
+                        $gardees[self::poser($types[$nomType], $idCategorie, (int)$numeroSous, $libelle, $resultat)] = true;
                     }
                 }
             }
+            self::nettoyer($gardees, $resultat);
             return true;
         });
         self::viderCache();
         return $resultat;
+    }
+
+    private static function nettoyer(array $gardees, array &$resultat): void {
+    //supprime les lignes absentes du Kronos qui ne contiennent aucun son (sous-catégories d'abord, puis catégories vides)
+        $sonsParLigne = array_column(Model::mdRequeteLister(
+                "SELECT idSsCategorie, COUNT(*) AS nb FROM " . Son::TABLE . " WHERE idSsCategorie IS NOT NULL GROUP BY idSsCategorie"),
+                'nb', 'idSsCategorie');
+        foreach (Model::mdRequeteLister("SELECT id, libelle FROM " . self::TABLE . " WHERE idCategorie <> 0") as $sous) {
+            if (isset($gardees[(int)$sous['id']])) {continue;}
+            if (isset($sonsParLigne[(int)$sous['id']])) {
+                $resultat['conservees'][] = $sous['libelle'] . " (" . $sonsParLigne[(int)$sous['id']] . " sons)";
+                continue;
+            }
+            Model::mdRequeteExecuter("DELETE FROM " . self::TABLE . " WHERE id = :id", ['id' => (int)$sous['id']]);
+            $resultat['supprimees']++;
+        }
+        foreach (Model::mdRequeteLister("SELECT c.id, c.libelle, (SELECT COUNT(*) FROM " . self::TABLE . " s WHERE s.idCategorie = c.id) AS nb"
+                                      . " FROM " . self::TABLE . " c WHERE c.idCategorie = 0") as $categorie) {
+            if (isset($gardees[(int)$categorie['id']]) || (int)$categorie['nb'] > 0) {continue;}
+            Model::mdRequeteExecuter("DELETE FROM " . self::TABLE . " WHERE id = :id", ['id' => (int)$categorie['id']]);
+            $resultat['supprimees']++;
+        }
     }
 
     private static function poser(int $idType, int $idParent, int $numero, string $libelle, array &$resultat): int {
@@ -140,7 +164,7 @@ class Categorie
           . " (SELECT COUNT(*) FROM " . Son::TABLE . " so JOIN " . self::TABLE . " s ON s.id = so.idSsCategorie"
           . "   WHERE s.idCategorie = c.id) AS nbSons"
           . " FROM " . self::TABLE . " c WHERE c.idCategorie = ? AND c.idType = ?"
-          . " ORDER BY c.idPersonalise < 0, c.idPersonalise, c.libelle",
+          . " ORDER BY c.idPersonalise, c.libelle",
             [self::RACINE, $idType]);
     }
 
@@ -149,7 +173,7 @@ class Categorie
         return Model::mdRequeteLister(
             "SELECT s.id, s.idPersonalise, s.libelle,"
           . " (SELECT COUNT(*) FROM " . Son::TABLE . " so WHERE so.idSsCategorie = s.id) AS nbSons"
-          . " FROM " . self::TABLE . " s WHERE s.idCategorie = ? ORDER BY s.idPersonalise < 0, s.idPersonalise, s.libelle",
+          . " FROM " . self::TABLE . " s WHERE s.idCategorie = ? ORDER BY s.idPersonalise, s.libelle",
             [$idCategorie]);
     }
 
@@ -158,137 +182,36 @@ class Categorie
                                           . " WHERE id = ?", [$id]);
     }
 
-    public static function enregistrer(int $idParent, array $lignes, int $idType = 0): array {
-    //enregistre les lignes d'un niveau : catégories du type $idType si $idParent = 0, sinon sous-catégories de $idParent
-    //$lignes : id => ['numero' => n° Kronos, 'libelle' => libellé, 'fusion' => id cible ou 0, 'type' => idType (catégories)]
-    //1) fusions  2) numéros, libellés et types, contrôlés sur le résultat final - tout ou rien
-    //retourne ['modifies' => n, 'fusions' => n, 'erreurs' => [...]]
-        $resultat = ['modifies' => 0, 'fusions' => 0, 'erreurs' => []];
+    public static function renommer(int $idParent, array $lignes, int $idType = 0): array {
+    //libellés d'un niveau : catégories du type $idType si $idParent = 0, sinon sous-catégories de $idParent
+    //$lignes : id => ['libelle' => libellé] - tout ou rien
+    //retourne ['modifies' => n, 'erreurs' => [...]]
+        $resultat = ['modifies' => 0, 'erreurs' => []];
         $racine = $idParent === self::RACINE;
-        $actuels = [];
-        foreach (Model::mdRequeteLister("SELECT id, idPersonalise, libelle, idType FROM " . self::TABLE
-                                      . " WHERE idCategorie = ?" . ($racine ? " AND idType = ?" : ""),
-                                        $racine ? [$idParent, $idType] : [$idParent]) as $ligne) {
-            $actuels[(int)$ligne['id']] = $ligne;
-        }
-        $maximum = $racine ? self::NUMERO_MAX_CATEGORIE : self::NUMERO_MAX_SSCATEGORIE;
-        $types = self::types();
-
-        //fusions demandées (dans la même liste)
-        $fusions = [];
+        $actuels = array_column(Model::mdRequeteLister(
+                "SELECT id, libelle FROM " . self::TABLE . " WHERE idCategorie = ?" . ($racine ? " AND idType = ?" : ""),
+                $racine ? [$idParent, $idType] : [$idParent]), 'libelle', 'id');
+        $modifications = [];
         foreach ($lignes as $id => $ligne) {
-            $cible = (int)($ligne['fusion'] ?? 0);
-            if ($cible === 0 || !isset($actuels[(int)$id])) {continue;}
-            if ($cible === (int)$id || !isset($actuels[$cible])) {
-                $resultat['erreurs'][] = "Fusion impossible pour « " . $actuels[(int)$id]['libelle'] . " »";
+            $id = (int)$id;
+            if (!array_key_exists($id, $actuels) || !isset($ligne['libelle'])) {continue;}
+            $libelle = trim((string)$ligne['libelle']);
+            if ($libelle === (string)$actuels[$id]) {continue;}
+            if ($libelle === "" || mb_strlen($libelle) > self::LONGUEUR_LIBELLE) {
+                $resultat['erreurs'][] = "Libellé vide ou de plus de " . self::LONGUEUR_LIBELLE . " caractères (« " . $actuels[$id] . " »)";
                 continue;
             }
-            $fusions[(int)$id] = $cible;
+            $modifications[$id] = $libelle;
         }
-        foreach ($fusions as $cible) {
-            if (isset($fusions[$cible])) {
-                $resultat['erreurs'][] = "« " . $actuels[$cible]['libelle'] . " » ne peut pas être à la fois fusionnée et cible d'une fusion";
-            }
-        }
-
-        //valeurs finales des lignes conservées
-        $finales = [];
-        foreach ($actuels as $id => $actuel) {
-            if (isset($fusions[$id])) {continue;}
-            $saisie = $lignes[$id] ?? [];
-            $numero  = isset($saisie['numero']) && $saisie['numero'] !== "" ? (int)$saisie['numero'] : (int)$actuel['idPersonalise'];
-            $libelle = isset($saisie['libelle']) ? trim((string)$saisie['libelle']) : (string)$actuel['libelle'];
-            $type    = $racine ? (int)($saisie['type'] ?? $actuel['idType']) : null;
-            if ($libelle === "" || mb_strlen($libelle) > self::LONGUEUR_LIBELLE) {
-                $resultat['erreurs'][] = "Libellé vide ou de plus de " . self::LONGUEUR_LIBELLE . " caractères (« " . $actuel['libelle'] . " »)";
-            }
-            if ($numero !== self::SANS_NUMERO && ($numero < 0 || $numero > $maximum)) {
-                $resultat['erreurs'][] = "N° " . $numero . " hors limites (0 à " . $maximum . ", ou -1) pour « " . $libelle . " »";
-            }
-            if ($racine && !isset($types[$type])) {
-                $resultat['erreurs'][] = "Type inconnu pour « " . $libelle . " »";
-            }
-            $finales[$id] = ['numero' => $numero, 'libelle' => $libelle, 'type' => $type];
-        }
-
-        //n° uniques : dans la liste affichée, et dans la liste de destination pour un changement de type
-        $restants = array_filter($finales, fn($f) => !$racine || $f['type'] === $idType);
-        $resultat['erreurs'] = array_merge($resultat['erreurs'], self::doublons($restants));
-        if ($racine) {
-            foreach (array_filter($finales, fn($f) => $f['type'] !== $idType) as $partant) {
-                if ($partant['numero'] === self::SANS_NUMERO || !isset($types[$partant['type']])) {continue;}
-                $occupe = Model::mdRequeteListerUnique("SELECT libelle FROM " . self::TABLE
-                        . " WHERE idCategorie = 0 AND idType = ? AND idPersonalise = ?", [$partant['type'], $partant['numero']]);
-                if (count($occupe) > 0) {
-                    $resultat['erreurs'][] = "N° " . $partant['numero'] . " déjà utilisé dans les catégories "
-                                           . $types[$partant['type']] . " (« " . $occupe['libelle'] . " »)";
-                }
-            }
-        }
-        if (count($resultat['erreurs']) > 0) {
-            return $resultat;
-        }
-
-        Model::mdTransaction(function () use ($fusions, $finales, $actuels, $racine, &$resultat): bool {
-            foreach ($fusions as $source => $cible) {
-                $racine ? self::fusionnerCategorie($source, $cible) : self::fusionnerSousCategorie($source, $cible);
-                $resultat['fusions']++;
-            }
-            foreach ($finales as $id => $finale) {
-                $inchange = $finale['numero'] === (int)$actuels[$id]['idPersonalise']
-                         && $finale['libelle'] === (string)$actuels[$id]['libelle']
-                         && (!$racine || $finale['type'] === (int)$actuels[$id]['idType']);
-                if ($inchange) {continue;}
-                Model::mdRequeteExecuter("UPDATE " . self::TABLE
-                        . " SET idPersonalise = :numero, libelle = :libelle" . ($racine ? ", idType = :type" : "")
-                        . " WHERE id = :id",
-                        array_merge(['numero' => $finale['numero'], 'libelle' => $finale['libelle'], 'id' => $id],
-                                    $racine ? ['type' => $finale['type']] : []));
+        if (count($resultat['erreurs']) > 0) {return $resultat;}
+        Model::mdTransaction(function () use ($modifications, &$resultat): bool {
+            foreach ($modifications as $id => $libelle) {
+                Model::mdRequeteExecuter("UPDATE " . self::TABLE . " SET libelle = :libelle WHERE id = :id",
+                                         ['libelle' => $libelle, 'id' => $id]);
                 $resultat['modifies']++;
             }
             return true;
         });
-        self::viderCache();
         return $resultat;
-    }
-
-    private static function doublons(array $finales): array {
-    //erreurs pour les n° (hors -1) utilisés plusieurs fois
-        $erreurs = [];
-        $numeros = array_filter(array_column($finales, 'numero'), fn($n) => $n !== self::SANS_NUMERO);
-        foreach (array_keys(array_filter(array_count_values($numeros), fn($nb) => $nb > 1)) as $double) {
-            $erreurs[] = "N° " . $double . " utilisé plusieurs fois : "
-                . implode(", ", array_map(fn($f) => "« " . $f['libelle'] . " »",
-                                          array_filter($finales, fn($f) => $f['numero'] === $double)));
-        }
-        return $erreurs;
-    }
-
-    private static function fusionnerSousCategorie(int $source, int $cible): void {
-    //les sons passent dans la sous-catégorie cible, la source est supprimée
-        Model::mdRequeteExecuter("UPDATE " . Son::TABLE . " SET idSsCategorie = :cible WHERE idSsCategorie = :source",
-                                 ['cible' => $cible, 'source' => $source]);
-        Model::mdRequeteExecuter("DELETE FROM " . self::TABLE . " WHERE id = :id", ['id' => $source]);
-    }
-
-    private static function fusionnerCategorie(int $source, int $cible): void {
-    //chaque sous-catégorie de la source rejoint celle de même n° dans la cible (fusion), sinon elle est déplacée
-        $ciblesParNumero = [];
-        foreach (self::listerSousCategories($cible) as $sousCategorie) {
-            if ((int)$sousCategorie['idPersonalise'] !== self::SANS_NUMERO) {
-                $ciblesParNumero[(int)$sousCategorie['idPersonalise']] ??= (int)$sousCategorie['id'];
-            }
-        }
-        foreach (self::listerSousCategories($source) as $sousCategorie) {
-            $numero = (int)$sousCategorie['idPersonalise'];
-            if (isset($ciblesParNumero[$numero])) {
-                self::fusionnerSousCategorie((int)$sousCategorie['id'], $ciblesParNumero[$numero]);
-            } else {
-                Model::mdRequeteExecuter("UPDATE " . self::TABLE . " SET idCategorie = :cible WHERE id = :id",
-                                         ['cible' => $cible, 'id' => (int)$sousCategorie['id']]);
-                if ($numero !== self::SANS_NUMERO) {$ciblesParNumero[$numero] = (int)$sousCategorie['id'];}
-            }
-        }
-        Model::mdRequeteExecuter("DELETE FROM " . self::TABLE . " WHERE id = :id", ['id' => $source]);
     }
 }

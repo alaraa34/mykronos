@@ -6,7 +6,8 @@ namespace mykronos\src\php\son;
  * Recherche de sons
  *  - chaque mot saisi doit se trouver dans le nom du son, sa catégorie ou sa sous-catégorie
  *    (sans tenir compte des majuscules ni des accents)
- *  - filtres facultatifs : type (Program, Combi...) et typologie du fichier (sonsK2+, fromK3...)
+ *  - filtres facultatifs : type (Program, Combi...) et provenance du fichier :
+ *    SAUF_KRONOS (défaut) tout sauf les exports de mes Kronos, KRONOS seulement mes Kronos, TOUTES, ou une typologie
  *  - pour chaque combi trouvée : les programs qu'elle utilise ; pour chaque program : les combis qui l'utilisent
  ******************************************************************************/
 use shared\php\database\Model                       as Model;
@@ -17,8 +18,12 @@ class Recherche
 {
     public const MAXIMUM        = 200;                  //nombre de sons affichés au plus
     public const TABLE_LIENS    = PREFIXE_BDD . "combi_utilise_program";
+    public const SAUF_KRONOS    = -1;                   //provenance : tout sauf fromK2 / fromK3 (par défaut)
+    public const KRONOS         = -2;                   //provenance : seulement fromK2 / fromK3
+    public const TOUTES         = 0;
+    private const PREFIXE_KRONOS = "from";              //typologies des exports de mes Kronos
 
-    public static function rechercher(string $texte, int $idType = 0, int $idTypologie = 0): array {
+    public static function rechercher(string $texte, int $idType = 0, int $idTypologie = self::SAUF_KRONOS): array {
     //retourne ['sons' => [...], 'trop' => bool] - chaque son a en plus 'liens' (programs utilisés ou combis utilisatrices)
         $mots = self::mots($texte);
         if (count($mots) === 0) {return ['sons' => [], 'trop' => false];}
@@ -32,6 +37,8 @@ class Recherche
         }
         if ($idType > 0)      {$conditions[] = "so.idType = ?";    $parametres[] = $idType;}
         if ($idTypologie > 0) {$conditions[] = "f.typologie = ?";  $parametres[] = $idTypologie;}
+        if ($idTypologie === self::SAUF_KRONOS) {$conditions[] = "(ty.nom IS NULL OR ty.nom NOT LIKE ?)"; $parametres[] = self::PREFIXE_KRONOS . "%";}
+        if ($idTypologie === self::KRONOS)      {$conditions[] = "ty.nom LIKE ?";                         $parametres[] = self::PREFIXE_KRONOS . "%";}
 
         $sons = Model::mdRequeteLister(
             "SELECT so.id, so.nom, so.banque, so.idType, so.idFichier, t.valeurA AS type,"
@@ -94,5 +101,90 @@ class Recherche
 
     public static function listeTypologies(): array {
         return array_column(Nomenclature::mdNomenclatureGetListe(Fichier::GROUPE_TYPOLOGIE, "nom"), 'zone', 'identifiant');
+    }
+
+    //------------------------------------------------------------------------------------------------
+    // RECHERCHE DE COMBINAISONS : composition et présence sur mes Kronos
+    //------------------------------------------------------------------------------------------------
+    public static function rechercherCombinaisons(string $texte, int $idTypologie = self::SAUF_KRONOS): array {
+    //combis trouvées, chacune avec 'kronos' (banques de la combi sur K2 / K3)
+    //et 'programs' : [banque d'origine, nom, catégorie, 'kronos' => ['K2' => [banques], 'K3' => [banques]]]
+    //la présence sur un Kronos se juge par le nom, dans le dernier export importé de ce Kronos
+        $idCombi = array_flip(Categorie::types())['Combi'] ?? 0;
+        return self::ajouterPresenceKronos(self::rechercher($texte, $idCombi, $idTypologie));
+    }
+
+    public static function ajouterPresenceKronos(array $resultat): array {
+    //complète les combis d'un résultat de recherche : 'kronos' (banques de la combi sur K2 / K3) et 'programs'
+    //(composition avec banque d'origine et banques sur K2 / K3) - les autres sons ne sont pas modifiés
+        $types = array_flip(Categorie::types());
+        $idCombi = $types['Combi'] ?? 0;
+        $idProgram = $types['Program'] ?? 0;
+        $kronos = self::exportsKronos();
+        $resultat['kronos'] = $kronos;
+        if (count($resultat['sons']) === 0) {return $resultat;}
+
+        //contenu des exports chargé une fois : nom => banques, et banque => nom (programs d'usine)
+        $index = [];
+        foreach ($kronos as $machine => $idFichier) {
+            $index[$machine] = ['noms' => [$idProgram => [], $idCombi => []], 'banques' => []];
+            foreach (Model::mdRequeteLister("SELECT idType, banque, nom FROM " . Son::TABLE
+                                          . " WHERE idFichier = ? AND idType IN (?, ?)", [$idFichier, $idProgram, $idCombi]) as $son) {
+                $index[$machine]['noms'][(int)$son['idType']][self::cle((string)$son['nom'])][] = $son['banque'];
+                if ((int)$son['idType'] === $idProgram) {$index[$machine]['banques'][$son['banque']] = $son['nom'];}
+            }
+        }
+        $surKronos = function (int $idType, ?string $nom) use ($kronos, $index): array {
+            $banques = [];
+            foreach (array_keys($kronos) as $machine) {
+                $liste = $nom === null ? [] : ($index[$machine]['noms'][$idType][self::cle($nom)] ?? []);
+                sort($liste);
+                $banques[$machine] = $liste;
+            }
+            return $banques;
+        };
+
+        foreach ($resultat['sons'] as &$combi) {
+            if ((int)$combi['idType'] !== $idCombi) {continue;}
+            $combi['kronos'] = $surKronos($idCombi, (string)$combi['nom']);
+            $combi['programs'] = [];
+            foreach ($combi['liens'] as $lien) {
+                $nom = $lien['nom'];
+                if ($nom === null) {
+                    //program absent du PCG d'origine (son d'usine, banque I-...) : nom repris d'un export Kronos, même banque
+                    foreach (array_keys($kronos) as $machine) {$nom ??= $index[$machine]['banques'][$lien['banque']] ?? null;}
+                }
+                $combi['programs'][] = [
+                    'banque'    => $lien['banque'],
+                    'nom'       => $nom,
+                    'origine'   => $lien['nom'] !== null,           //false : nom repris d'un export Kronos
+                    'categorie' => $lien['categorie'] === null ? "" : $lien['categorie'] . " / " . $lien['sousCategorie'],
+                    'kronos'    => $surKronos($idProgram, $nom),
+                ];
+            }
+        }
+        unset($combi);
+        return $resultat;
+    }
+
+    private static function cle(string $nom): string {
+    //comparaison des noms comme MySQL : sans majuscules ni espaces de fin
+        return mb_strtolower(rtrim($nom));
+    }
+
+    public static function exportsKronos(): array {
+    //dernier export importé de chaque Kronos : 'K2' => idFichier, 'K3' => idFichier (absent si aucun)
+        $exports = [];
+        foreach (Model::mdRequeteLister(
+                "SELECT f.id, n.nom AS typologie FROM " . Fichier::TABLE . " f"
+              . " JOIN " . Nomenclature::TABLE . " n ON n.id = f.typologie"
+              . " WHERE n.groupe = ? AND n.nom LIKE ? AND f.importContenu = 1 AND f.exclus = 0"
+              . " ORDER BY f.dateFichier DESC, f.id DESC",
+                [Fichier::GROUPE_TYPOLOGIE, self::PREFIXE_KRONOS . "%"]) as $ligne) {
+            $machine = strtoupper(substr((string)$ligne['typologie'], strlen(self::PREFIXE_KRONOS)));
+            $exports[$machine] ??= (int)$ligne['id'];
+        }
+        ksort($exports);
+        return $exports;
     }
 }

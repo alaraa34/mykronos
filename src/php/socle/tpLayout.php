@@ -38,6 +38,13 @@
             </span>
         </div>
     </nav>
+    <!-- indicateur "traitement en cours" : affiché si la page suivante tarde (import, détection...) -->
+    <div id="traitementEnCours" class="traitement-en-cours d-none" role="status" aria-live="polite">
+        <div class="traitement-boite">
+            <div class="spinner-border" aria-hidden="true"></div>
+            <div class="mt-2" id="traitementTexte">Traitement en cours…</div>
+        </div>
+    </div>
     <!-- AFFICHAGE PAGE -->
     <main class="container">
          <?= $content ?>
@@ -48,5 +55,32 @@
         include_once (ROOT_PATH . 'shared/includes/jquery_ui.php');
         if (isset($script)){echo $script;}
     ?>
+    <script>
+    //indicateur de traitement : sur un lien de l'appli ou un formulaire, affiché après un court délai
+    //(pas sur les téléchargements, ni sur les liens qui ouvrent un menu ou un repli)
+    (function () {
+        const voile = document.getElementById('traitementEnCours');
+        let minuteur = null;
+        function afficher(texte) {
+            clearTimeout(minuteur);
+            minuteur = setTimeout(function () {
+                document.getElementById('traitementTexte').textContent = texte || 'Traitement en cours…';
+                voile.classList.remove('d-none');
+            }, 400);
+        }
+        document.addEventListener('click', function (evt) {
+            const lien = evt.target.closest('a[href]');
+            if (!lien || evt.defaultPrevented || evt.ctrlKey || evt.metaKey || evt.shiftKey || lien.target === '_blank') {return;}
+            const href = lien.getAttribute('href');
+            if (href.startsWith('#') || lien.hasAttribute('data-bs-toggle') || href.includes('fct=telecharger')) {return;}
+            afficher(lien.dataset.attente);
+        });
+        document.addEventListener('submit', function (evt) {
+            if (!evt.defaultPrevented) {afficher(evt.target.dataset.attente);}
+        });
+        //retour arrière (page restaurée depuis le cache) : on masque
+        window.addEventListener('pageshow', function () {clearTimeout(minuteur); voile.classList.add('d-none');});
+    })();
+    </script>
 </body>
 </html>

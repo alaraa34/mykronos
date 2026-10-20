@@ -10,6 +10,7 @@ $e = fn($valeur) => htmlspecialchars((string)$valeur);
 $rubriques = [
     'ajoutes'   => ['Ajoutés',   'success'],
     'modifies'  => ['Date modifiée (imports réinitialisés)', 'warning'],
+    'renommes'  => ['Exports Kronos renommés', 'primary'],
     'anomalies' => ['Anomalies', 'danger'],
     'inchanges' => ['Inchangés', 'secondary'],
 ];
@@ -18,7 +19,7 @@ ob_start(); ?>
     <h2 class="h4 mb-3">Détection des fichiers PCG</h2>
     <div class="row g-2 mb-4">
         <?php foreach ($rubriques as $cle => [$titre, $couleur]): ?>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="border border-<?= $couleur ?> rounded p-2 text-center">
                 <div class="fs-3 fw-bold text-<?= $couleur ?>"><?= count($compteRendu[$cle]) ?></div>
                 <div class="small"><?= $titre ?></div>

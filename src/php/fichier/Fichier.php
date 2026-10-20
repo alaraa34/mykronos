@@ -30,6 +30,7 @@ class Fichier extends Mere
     public const REPERTOIRE         = "fichiers";       //racine des fichiers Kronos dans le projet (hors git)
     public const REPERTOIRE_PCG     = "pcg";            //sous-répertoire des PCG, contient un dossier par typologie
     public const GROUPE_TYPOLOGIE   = "TYPOLOGIE";
+    public const PREFIXE_KRONOS     = "from";           //typologies des exports de mes Kronos : fromK2, fromK3
     public const EXTENSION          = "pcg";
     public const FORMAT_PREFIXE_ID  = "%04d_";          //préfixe id du nom téléchargé, ex 0012_JMJ.PCG
 
@@ -49,8 +50,9 @@ class Fichier extends Mere
     //  - emplacement connu, même date             : rien
     //  - emplacement connu, date différente       : nouvelle date, importContenu et importComposition remis à false
     //l'emplacement identifie le fichier : un même nom peut exister dans deux dossiers différents
-    //retourne le compte rendu ['ajoutes'=>[], 'modifies'=>[], 'inchanges'=>[], 'anomalies'=>[]]
-        $compteRendu = ['ajoutes' => [], 'modifies' => [], 'inchanges' => [], 'anomalies' => []];
+    //les exports de mes Kronos (fromK2 / fromK3) sont d'abord renommés K2_aaaa-mm-jj.PCG / K3_aaaa-mm-jj.PCG
+    //retourne le compte rendu ['ajoutes'=>[], 'modifies'=>[], 'renommes'=>[], 'inchanges'=>[], 'anomalies'=>[]]
+        $compteRendu = ['ajoutes' => [], 'modifies' => [], 'renommes' => [], 'inchanges' => [], 'anomalies' => []];
         $racine = TbIndex::projetPath() . self::REPERTOIRE . "/";
 
         foreach (Nomenclature::mdNomenclatureGetListe(self::GROUPE_TYPOLOGIE, "nom") as $typologie) {
@@ -60,6 +62,9 @@ class Fichier extends Mere
                 continue;
             }
             foreach (self::listerPCG($racine . $dossier) as $relatif) {
+                if (str_starts_with((string)$typologie['zone'], self::PREFIXE_KRONOS)) {
+                    $relatif = self::renommerExportKronos($racine . $dossier, $relatif, (string)$typologie['zone'], $compteRendu);
+                }
                 $emplacement = $dossier . "/" . $relatif;
                 $date = date("Y-m-d", (int)filemtime($racine . $emplacement));
                 $action = self::enregistrer($emplacement, $date, (int)$typologie['identifiant']);
@@ -67,6 +72,35 @@ class Fichier extends Mere
             }
         }
         return $compteRendu;
+    }
+
+    private static function renommerExportKronos(string $repertoire, string $relatif, string $typologie, array &$compteRendu): string {
+    //renomme un export de Kronos en K2_aaaa-mm-jj.PCG (machine = typologie sans "from", date du fichier)
+    //le PCG ne contient rien qui distingue le K2 du K3 : c'est le dossier de dépôt qui fait foi
+    //retourne le nouveau chemin relatif (l'ancien si déjà au bon format ou si le renommage échoue)
+        $machine = strtoupper(substr($typologie, strlen(self::PREFIXE_KRONOS)));          //K2, K3
+        $nom = basename($relatif);
+        if (preg_match('/^' . preg_quote($machine, '/') . '_\d{4}-\d{2}-\d{2}(_\d+)?\.pcg$/i', $nom) === 1) {
+            return $relatif;
+        }
+        $sousDossier = dirname($relatif) === "." ? "" : dirname($relatif) . "/";
+        $base = $machine . "_" . date("Y-m-d", (int)filemtime($repertoire . "/" . $relatif));
+        $nouveau = $base . ".PCG";
+        for ($n = 2; file_exists($repertoire . "/" . $sousDossier . $nouveau); $n++) {
+            $nouveau = $base . "_" . $n . ".PCG";
+        }
+        if (!@rename($repertoire . "/" . $relatif, $repertoire . "/" . $sousDossier . $nouveau)) {
+            $compteRendu['anomalies'][] = "Renommage impossible (fichier ouvert ?) : " . $relatif;
+            return $relatif;
+        }
+        //fichier déjà inscrit sous l'ancien nom : la ligne suit le fichier
+        $prefixe = self::REPERTOIRE_PCG . "/" . $typologie . "/";
+        Model::mdRequeteExecuter("UPDATE " . self::TABLE . " SET emplacement = :nouveau, libelle = :libelle WHERE emplacement = :ancien",
+                                 ['nouveau' => $prefixe . $sousDossier . $nouveau, 'libelle' => pathinfo($nouveau, PATHINFO_FILENAME),
+                                  'ancien' => $prefixe . $relatif]);
+        $compteRendu['renommes'][] = ['emplacement' => $prefixe . $relatif . " → " . $nouveau,
+                                      'date' => date("Y-m-d", (int)filemtime($repertoire . "/" . $sousDossier . $nouveau))];
+        return $sousDossier . $nouveau;
     }
 
     private static function enregistrer(string $emplacement, string $date, int $idTypologie): string {

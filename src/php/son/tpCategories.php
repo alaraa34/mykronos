@@ -1,27 +1,22 @@
 <?php
 namespace mykronos\src\php\son;
 /*******************************************************************************
- * Edition des libellés des catégories (racines de mk_cat_sscat)
+ * Catégories (racines de mk_cat_sscat), une liste par type : Program et Combi
+ * Les n° et libellés viennent du Global de mon Kronos ; les libellés restent modifiables
  * Variables attendues : $types, $idType, $categories, $pcgKronos, $message, $succes
  ******************************************************************************/
 use shared\php\toolbox\Toolbox_adressage as TbAdressage;
 use shared\php\classes\socle\Menu        as Menu;
 
 $e = fn($valeur) => htmlspecialchars((string)$valeur);
-$choixFusion = function (int $id) use ($categories, $e): string {
-//liste des cibles possibles pour fusionner la ligne $id
-    $html = '<select class="form-select form-select-sm fusion" name="lignes[' . $id . '][fusion]" aria-label="Fusionner dans">'
-          . '<option value="0">—</option>';
-    foreach ($categories as $cible) {
-        if ((int)$cible['id'] === $id) {continue;}
-        $html .= '<option value="' . (int)$cible['id'] . '">' . (int)$cible['idPersonalise'] . ' - ' . $e($cible['libelle']) . '</option>';
-    }
-    return $html . '</select>';
-};
 ob_start(); ?>
 <section class="py-4">
-    <h2 class="h4 mb-3">Catégories <span class="badge text-bg-secondary"><?= count($categories) ?></span></h2>
-    <form method="get" action="index.php" class="row g-2 align-items-end mb-3">
+    <h2 class="h4 mb-3">Catégories</h2>
+    <?php if ($message !== ""): ?>
+        <div class="alert alert-<?= $succes ? 'success' : 'warning' ?> py-2"><?= $e($message) ?></div>
+    <?php endif; ?>
+
+    <form method="get" action="index.php" class="row g-2 align-items-end mb-3" data-attente="Lecture des catégories du Kronos…">
         <input type="hidden" name="<?= Menu::FONCTION ?>" value="chargerCategoriesKronos">
         <input type="hidden" name="<?= Menu::DOMAINE ?>" value="son">
         <input type="hidden" name="<?= Menu::CONTROLEUR ?>" value="son">
@@ -41,6 +36,7 @@ ob_start(); ?>
                 <i class="bi bi-cloud-download"></i> Charger les catégories du Kronos</button>
         </div>
     </form>
+
     <ul class="nav nav-tabs mb-3">
         <?php foreach ($types as $id => $nom): ?>
             <li class="nav-item">
@@ -49,12 +45,7 @@ ob_start(); ?>
             </li>
         <?php endforeach; ?>
     </ul>
-    <?php if ($message !== ""): ?>
-        <div class="alert alert-<?= $succes ? 'success' : 'warning' ?> py-2"><?= $e($message) ?></div>
-    <?php endif; ?>
-    <p class="small text-muted">N° = numéro de la catégorie sur le Kronos (0 à 17, -1 : sans numéro). Les lignes « à renseigner » ont été créées par l'import.
-        Fusionner : les sons et les sous-catégories passent dans la catégorie choisie (sous-catégories de même N° réunies), puis la ligne est supprimée.
-        Type : les Programs et les Combis ont chacun leur liste de catégories ; changer le type déplace la catégorie dans l'autre liste.</p>
+
     <form method="post" action="<?= TbAdressage::getURLstatic('son', 'enregistrerCategories', $idType) ?>">
         <div class="table-responsive">
         <table class="table table-sm table-hover align-middle">
@@ -64,19 +55,12 @@ ob_start(); ?>
                     <th>Libellé</th>
                     <th class="text-center">Sous-catégories</th>
                     <th class="text-center">Sons</th>
-                    <th>Fusionner dans</th>
-                    <th>Type</th>
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($categories as $c): $aRenseigner = str_contains((string)$c['libelle'], "à renseigner"); ?>
-                <tr class="<?= $aRenseigner ? 'table-warning' : '' ?>">
-                    <td class="text-center">
-                        <input type="number" class="form-control form-control-sm text-center numero" required
-                               min="-1" max="<?= Categorie::NUMERO_MAX_CATEGORIE ?>"
-                               name="lignes[<?= (int)$c['id'] ?>][numero]" value="<?= (int)$c['idPersonalise'] ?>"
-                               aria-label="N° de « <?= $e($c['libelle']) ?> »">
-                    </td>
+            <?php foreach ($categories as $c): ?>
+                <tr>
+                    <td class="text-center"><?= (int)$c['idPersonalise'] ?></td>
                     <td>
                         <input type="text" class="form-control form-control-sm" maxlength="<?= Categorie::LONGUEUR_LIBELLE ?>"
                                name="lignes[<?= (int)$c['id'] ?>][libelle]" value="<?= $e($c['libelle']) ?>" required
@@ -89,20 +73,12 @@ ob_start(); ?>
                         </a>
                     </td>
                     <td class="text-center"><?= (int)$c['nbSons'] ?></td>
-                    <td><?= $choixFusion((int)$c['id']) ?></td>
-                    <td>
-                        <select class="form-select form-select-sm" name="lignes[<?= (int)$c['id'] ?>][type]" aria-label="Type de « <?= $e($c['libelle']) ?> »">
-                            <?php foreach ($types as $id => $nom): ?>
-                                <option value="<?= $id ?>" <?= $id === $idType ? 'selected' : '' ?>><?= $e($nom) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
         </div>
-        <button type="submit" class="btn btn-dark btn-sm">Enregistrer</button>
+        <button type="submit" class="btn btn-dark btn-sm">Enregistrer les libellés</button>
     </form>
 </section>
 <?php

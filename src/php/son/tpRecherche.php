@@ -21,7 +21,7 @@ $couleurs = ['Program' => 'primary', 'Combi' => 'success', 'WaveSequence' => 'wa
 ob_start(); ?>
 <section class="py-4">
     <h2 class="h4 mb-3">Rechercher un son</h2>
-    <form method="get" action="index.php" class="row g-2 align-items-end mb-3" role="search">
+    <form method="get" action="index.php" class="row g-2 align-items-end mb-3" role="search" data-attente="Recherche en cours…">
         <input type="hidden" name="<?= Menu::FONCTION ?>" value="rechercherSon">
         <input type="hidden" name="<?= Menu::DOMAINE ?>" value="son">
         <input type="hidden" name="<?= Menu::CONTROLEUR ?>" value="recherche">
@@ -42,7 +42,9 @@ ob_start(); ?>
         <div class="col-6 col-md-2">
             <label class="form-label small mb-1" for="typologie">Provenance</label>
             <select class="form-select" id="typologie" name="typologie">
-                <option value="0">Toutes</option>
+                <option value="<?= Recherche::SAUF_KRONOS ?>" <?= $idTypologie === Recherche::SAUF_KRONOS ? 'selected' : '' ?>>Tout sauf mes Kronos</option>
+                <option value="<?= Recherche::KRONOS ?>" <?= $idTypologie === Recherche::KRONOS ? 'selected' : '' ?>>Mes Kronos (K2 et K3)</option>
+                <option value="<?= Recherche::TOUTES ?>" <?= $idTypologie === Recherche::TOUTES ? 'selected' : '' ?>>Toutes</option>
                 <?php foreach ($typologies as $id => $nom): ?>
                     <option value="<?= (int)$id ?>" <?= (int)$id === $idTypologie ? 'selected' : '' ?>><?= $e($nom) ?></option>
                 <?php endforeach; ?>
@@ -105,11 +107,9 @@ ob_start(); ?>
                 <?php if (count($son['liens']) > 0): ?>
                 <tr class="collapse ligne-liens" id="<?= $idLiens ?>">
                     <td colspan="7">
-                        <div class="ms-3 ps-3 border-start border-3 <?= $estCombi ? 'border-success' : 'border-primary' ?>">
-                            <div class="small fw-semibold mb-1">
-                                <?= $estCombi ? 'Programs qui composent « ' . $e($son['nom']) . ' »'
-                                              : 'Combis qui utilisent « ' . $e($son['nom']) . ' »' ?>
-                            </div>
+                        <?php if ($estCombi): $combi = $son; include('tpComposition.php'); else: ?>
+                        <div class="ms-3 ps-3 border-start border-3 border-primary">
+                            <div class="small fw-semibold mb-1">Combis qui utilisent « <?= $e($son['nom']) ?> »</div>
                             <table class="table table-sm table-borderless small mb-1">
                                 <?php foreach ($son['liens'] as $lien): ?>
                                 <tr>
@@ -118,12 +118,13 @@ ob_start(); ?>
                                         <td class="fw-semibold"><?= $e($lien['nom']) ?></td>
                                         <td class="text-muted"><?= $e($lien['categorie'] ?? '') ?><?= $lien['sousCategorie'] !== null ? ' / ' . $e($lien['sousCategorie']) : '' ?></td>
                                     <?php else: ?>
-                                        <td colspan="2" class="fst-italic text-muted">absent de ce PCG (son d'usine ou d'un autre fichier)</td>
+                                        <td colspan="2" class="fst-italic text-muted">absente de ce PCG</td>
                                     <?php endif; ?>
                                 </tr>
                                 <?php endforeach; ?>
                             </table>
                         </div>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endif; ?>
