@@ -47,11 +47,30 @@ ob_start(); ?>
     </details>
     <?php endforeach; ?>
 
-    <?php $mo = fn(int $octets): string => number_format($octets / 1048576, 1, ',', ' ') . " Mo"; ?>
+    <?php
+    $mo = fn(int $octets): string => number_format($octets / 1048576, 1, ',', ' ') . " Mo";
+    //affiche une liste de fichiers (emplacement, taille, raison) regroupée par cause : PCG Nautilus d'abord, puis les extensions
+    $afficherParCause = function (array $liste) use ($e, $mo): void {
+        $groupes = [];
+        foreach ($liste as $f) {$groupes[$f['raison']][] = $f;}
+        uksort($groupes, fn($a, $b) => [$a !== "Nautilus", $a] <=> [$b !== "Nautilus", $b]);
+        foreach ($groupes as $raison => $fichiers): ?>
+        <details class="small mb-2">
+            <summary><span class="fw-semibold"><?= $e($raison === "Nautilus" ? "PCG Nautilus" : "Extension ." . $raison) ?></span>
+                <span class="badge text-bg-secondary"><?= count($fichiers) ?></span>
+                <span class="text-muted"><?= $mo(array_sum(array_column($fichiers, 'taille'))) ?></span></summary>
+            <ul class="mt-1 mb-0">
+                <?php foreach ($fichiers as $f): ?><li><?= $e($f['emplacement']) ?> <span class="text-muted">(<?= $mo($f['taille']) ?>)</span></li><?php endforeach; ?>
+            </ul>
+        </details>
+        <?php endforeach;
+    };
+    ?>
     <?php if ($suppression !== null): ?>
         <div class="alert alert-<?= count($suppression['erreurs']) === 0 ? 'success' : 'warning' ?> py-2">
-            <?= (int)$suppression['supprimes'] ?> fichier<?= $suppression['supprimes'] > 1 ? 's' : '' ?> inutile<?= $suppression['supprimes'] > 1 ? 's' : '' ?> supprimé<?= $suppression['supprimes'] > 1 ? 's' : '' ?>
-            (<?= $mo((int)$suppression['octets']) ?> libérés), <?= (int)$suppression['dossiers'] ?> dossier<?= $suppression['dossiers'] > 1 ? 's' : '' ?> vide<?= $suppression['dossiers'] > 1 ? 's' : '' ?> retiré<?= $suppression['dossiers'] > 1 ? 's' : '' ?>.
+            <div class="mb-2"><?= (int)$suppression['supprimes'] ?> fichier<?= $suppression['supprimes'] > 1 ? 's' : '' ?> inutile<?= $suppression['supprimes'] > 1 ? 's' : '' ?> supprimé<?= $suppression['supprimes'] > 1 ? 's' : '' ?>
+            (<?= $mo((int)$suppression['octets']) ?> libérés), <?= (int)$suppression['dossiers'] ?> dossier<?= $suppression['dossiers'] > 1 ? 's' : '' ?> vide<?= $suppression['dossiers'] > 1 ? 's' : '' ?> retiré<?= $suppression['dossiers'] > 1 ? 's' : '' ?>.</div>
+            <?php $afficherParCause($suppression['fichiers'] ?? []); ?>
             <?php foreach ($suppression['erreurs'] as $erreur): ?><div class="small"><?= $e($erreur) ?></div><?php endforeach; ?>
         </div>
     <?php endif; ?>
@@ -63,15 +82,9 @@ ob_start(); ?>
             <?php if (count($aSupprimer) === 0): ?>
                 <p class="small text-muted mb-0">Aucun fichier à supprimer (<?= $e(implode(", ", $raisons)) ?>) dans fichiers/pcg.</p>
             <?php else: ?>
-                <details class="small mb-2">
-                    <?php $parRaison = array_count_values(array_column($aSupprimer, 'raison')); ?>
-                    <summary><?= count($aSupprimer) ?> fichier<?= count($aSupprimer) > 1 ? 's' : '' ?>,
-                        <?= $mo(array_sum(array_column($aSupprimer, 'taille'))) ?> :
-                        <?= $e(implode(", ", array_map(fn($r, $n) => $n . " " . $r, array_keys($parRaison), $parRaison))) ?></summary>
-                    <ul class="mt-1 mb-0">
-                        <?php foreach ($aSupprimer as $f): ?><li><?= $e($f['emplacement']) ?> <span class="text-muted">(<?= $e($f['raison']) ?>, <?= $mo($f['taille']) ?>)</span></li><?php endforeach; ?>
-                    </ul>
-                </details>
+                <p class="small mb-2"><?= count($aSupprimer) ?> fichier<?= count($aSupprimer) > 1 ? 's' : '' ?>,
+                    <?= $mo(array_sum(array_column($aSupprimer, 'taille'))) ?> au total</p>
+                <?php $afficherParCause($aSupprimer); ?>
                 <form method="post" action="<?= TbAdressage::getURLstatic('fichier', 'supprimerFichiersInutiles') ?>"
                       data-attente="Suppression des fichiers inutiles…"
                       onsubmit="return confirm('Supprimer définitivement <?= count($aSupprimer) ?> fichier(s) ? Seuls les PCG de Nautilus sont supprimés parmi les PCG ; les fichiers d\'échantillons ne sont jamais supprimés.');">

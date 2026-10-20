@@ -220,8 +220,8 @@ class Fichier extends Mere
 
     public static function supprimerFichiersInutiles(): array {
     //supprime les fichiers listés par fichiersASupprimer puis les dossiers devenus vides (sauf les dossiers de typologie)
-    //retourne ['supprimes' => n, 'octets' => n, 'dossiers' => n, 'erreurs' => [...]]
-        $resultat = ['supprimes' => 0, 'octets' => 0, 'dossiers' => 0, 'erreurs' => []];
+    //retourne ['supprimes' => n, 'octets' => n, 'dossiers' => n, 'erreurs' => [...], 'fichiers' => [fichiers supprimés, même format que fichiersASupprimer]]
+        $resultat = ['supprimes' => 0, 'octets' => 0, 'dossiers' => 0, 'erreurs' => [], 'fichiers' => []];
         $racine = TbIndex::projetPath() . self::REPERTOIRE . "/";
         $dossiers = [];
         foreach (self::fichiersASupprimer() as $fichier) {
@@ -230,6 +230,7 @@ class Fichier extends Mere
                 if ($fichier['raison'] === "Nautilus") {self::oublier($fichier['emplacement']);}
                 $resultat['supprimes']++;
                 $resultat['octets'] += $fichier['taille'];
+                $resultat['fichiers'][] = $fichier;
                 $dossiers[dirname($chemin)] = true;
             } else {
                 $resultat['erreurs'][] = "Suppression impossible : " . $fichier['emplacement'];
