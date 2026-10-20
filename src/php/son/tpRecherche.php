@@ -110,7 +110,7 @@ ob_start(); ?>
                         <button type="button" class="btn btn-sm <?= $estCombi ? 'btn-success' : 'btn-outline-primary' ?>"
                                 data-bs-toggle="collapse" data-bs-target="#<?= $idLiens ?>" aria-expanded="false" aria-controls="<?= $idLiens ?>"
                                 title="<?= $estCombi ? 'Programs qui composent la combi' : 'Combis qui utilisent ce program' ?>">
-                            <i class="bi <?= $estCombi ? 'bi-diagram-3' : 'bi-box-arrow-up-right' ?>"></i> <?= count($son['liens']) ?>
+                            <i class="bi <?= $estCombi ? 'bi-diagram-3' : 'bi-box-arrow-up-right' ?>"></i> <?= count($estCombi ? ($son['programs'] ?? $son['liens']) : $son['liens']) ?>
                         </button>
                         <?php endif; ?>
                         <?php if ($estCombi): ?>

@@ -226,9 +226,54 @@ class Recherche
                 ];
             }
             $combi['disposition'] = self::disposition($combi['programs']);
+            $combi['programs'] = self::regrouperTimbres($combi['programs']);
         }
         unset($combi);
         return $resultat;
+    }
+
+    private static function regrouperTimbres(array $timbres): array {
+    //une ligne par program : timbres regroupés (« 1-8, 12 »), zone globale et nombre de zones, canaux, vélocité et volumes
+        $groupes = [];
+        foreach ($timbres as $t) {
+            $cle = $t['banque'];
+            if (!isset($groupes[$cle])) {
+                $groupes[$cle] = $t + ['timbres' => [], 'zones' => [], 'canaux' => [], 'volumes' => [], 'velocites' => []];
+            }
+            $g = &$groupes[$cle];
+            $g['timbres'][] = $t['timbre'];
+            if ($t['zone'][0] !== null) {$g['zones'][$t['zone'][0] . "-" . $t['zone'][1]] = [(int)$t['zone'][0], (int)$t['zone'][1]];}
+            if ($t['velocite'][0] !== null) {$g['velocites'][$t['velocite'][0] . "-" . $t['velocite'][1]] = [(int)$t['velocite'][0], (int)$t['velocite'][1]];}
+            if ($t['canal'] !== null) {$g['canaux'][$t['canal']] = (int)$t['canal'];}
+            if ($t['volume'] !== null) {$g['volumes'][$t['volume']] = (int)$t['volume'];}
+            unset($g);
+        }
+        foreach ($groupes as &$g) {
+            $g['timbre'] = self::plages($g['timbres']);
+            $g['nbZones'] = count($g['zones']);
+            $g['zone'] = $g['nbZones'] === 0 ? [null, null]
+                       : [min(array_column($g['zones'], 0)), max(array_column($g['zones'], 1))];
+            $g['velocite'] = count($g['velocites']) === 0 ? [null, null]
+                       : [min(array_column($g['velocites'], 0)), max(array_column($g['velocites'], 1))];
+            sort($g['canaux']);
+            $g['canal'] = implode(", ", array_map(fn($c) => $c === 17 ? "Gch" : (string)$c, $g['canaux']));
+            $g['volume'] = count($g['volumes']) === 0 ? "" : (min($g['volumes']) === max($g['volumes'])
+                         ? (string)min($g['volumes']) : min($g['volumes']) . "-" . max($g['volumes']));
+        }
+        unset($g);
+        return array_values($groupes);
+    }
+
+    private static function plages(array $numeros): string {
+    //[1,2,3,4,12,13] => "1-4, 12, 13"
+        sort($numeros);
+        $morceaux = [];
+        for ($i = 0; $i < count($numeros); $i = $j + 1) {
+            for ($j = $i; $j + 1 < count($numeros) && $numeros[$j + 1] === $numeros[$j] + 1; $j++) {}
+            $morceaux[] = $j - $i >= 2 ? $numeros[$i] . "-" . $numeros[$j]
+                        : implode(", ", array_slice($numeros, $i, $j - $i + 1));
+        }
+        return implode(", ", $morceaux);
     }
 
     private static function disposition(array $timbres): string {
