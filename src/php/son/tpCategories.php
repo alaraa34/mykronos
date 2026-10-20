@@ -2,9 +2,10 @@
 namespace mykronos\src\php\son;
 /*******************************************************************************
  * Edition des libellés des catégories (racines de mk_cat_sscat)
- * Variables attendues : $types, $idType, $categories, $message, $succes
+ * Variables attendues : $types, $idType, $categories, $pcgKronos, $message, $succes
  ******************************************************************************/
 use shared\php\toolbox\Toolbox_adressage as TbAdressage;
+use shared\php\classes\socle\Menu        as Menu;
 
 $e = fn($valeur) => htmlspecialchars((string)$valeur);
 $choixFusion = function (int $id) use ($categories, $e): string {
@@ -20,6 +21,26 @@ $choixFusion = function (int $id) use ($categories, $e): string {
 ob_start(); ?>
 <section class="py-4">
     <h2 class="h4 mb-3">Catégories <span class="badge text-bg-secondary"><?= count($categories) ?></span></h2>
+    <form method="get" action="index.php" class="row g-2 align-items-end mb-3">
+        <input type="hidden" name="<?= Menu::FONCTION ?>" value="chargerCategoriesKronos">
+        <input type="hidden" name="<?= Menu::DOMAINE ?>" value="son">
+        <input type="hidden" name="<?= Menu::CONTROLEUR ?>" value="son">
+        <div class="col-12 col-md-7">
+            <label class="form-label small mb-1" for="pcgKronos">Charger les catégories depuis un PCG de mon Kronos (enregistré avec le Global)</label>
+            <select class="form-select form-select-sm" id="pcgKronos" name="id" <?= count($pcgKronos) === 0 ? 'disabled' : '' ?>>
+                <?php if (count($pcgKronos) === 0): ?>
+                    <option>Aucun PCG fromK2 / fromK3 détecté</option>
+                <?php endif; ?>
+                <?php foreach ($pcgKronos as $id => $libelle): ?>
+                    <option value="<?= $id ?>"><?= $e($libelle) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-12 col-md-5">
+            <button type="submit" class="btn btn-dark btn-sm" <?= count($pcgKronos) === 0 ? 'disabled' : '' ?>>
+                <i class="bi bi-cloud-download"></i> Charger les catégories du Kronos</button>
+        </div>
+    </form>
     <ul class="nav nav-tabs mb-3">
         <?php foreach ($types as $id => $nom): ?>
             <li class="nav-item">

@@ -12,11 +12,13 @@ namespace mykronos\src\php\fichier;
  *   PRG1 > MBK1/PBK1  banques de Programs     CMB1 > CBK1  banques de Combis (16 timbres)
  *   WSQ1 > WBK1       Wave Sequences          DKT1 > DBK1  Drum Kits
  *   DPI1 > DPN1/DPD1  Drum Patterns           CMB2         banque/program des timbres (OS 1.5/1.6)
+ *   GLB1              réglages globaux, dont les noms des catégories (PCG enregistré avec le Global)
  * Les emplacements vides ou "Init ..." sont écartés (comme PCG Tools).
  *
  * Utilisation : $contenu = LecteurPcg::lire($chemin);
  *   ['modele' => 'Kronos', 'os' => '3.x', 'sons' => [ ['type','banque','nom','categorie','sousCategorie'], ...],
- *    'compositions' => [ 'U-B000' => ['U-AA000', ...], ... ] ]
+ *    'compositions' => [ 'U-B000' => ['U-AA000', ...], ... ],
+ *    'categories' => null (pas de Global) ou ['Program' => [n° => ['libelle' => .., 'sous' => [n° => libellé]]], 'Combi' => [...]] ]
  ******************************************************************************/
 class LecteurPcg
 {
@@ -39,6 +41,10 @@ class LecteurPcg
         0x70 => ['nom' => "OASYS",  'categorieProgram' => 2556, 'categorieCombi' => 4778, 'timbres' => 4790, 'timbre' => 186],
     ];
     private const NB_PROGRAMS_BANQUE = 128;
+    //noms des catégories dans le bloc GLB1 : Programs (18 catégories puis 18 x 8 sous-catégories), puis Combis
+    private const GLOBAL_CATEGORIES  = 12912;   //position après l'en-tête du bloc
+    private const NB_CATEGORIES      = 18;
+    private const NB_SOUS_CATEGORIES = 8;
     private const STATUTS_UTILISES  = [1, 2];   //statut du timbre : 0 Off, 1 Int, 2 Both, 3 Ext, 4 Ex2
 
     //banques (index PCG Tools => nom)
@@ -65,6 +71,7 @@ class LecteurPcg
     private array $combis = [];                 //[nom banque, n° combi dans la banque, position] pour les timbres
     private array $combisParBanque = [];        //nom banque => nombre de combis (pour CMB2)
     private array $cbk2 = [];                   //position des données CBK2 par banque (OS 1.5/1.6)
+    private int $global = 0;                    //position des données du bloc GLB1 (0 : absent)
 
     public static function lire(string $chemin): array {
         $donnees = @file_get_contents($chemin);
@@ -101,11 +108,12 @@ class LecteurPcg
                 "DKT1"  => $this->lireBanques($taille, "DBK1", fn() => $this->lireDbk1()),
                 "DPI1"  => $this->lireDpi1($taille),
                 "INI3"  => $this->ini3($taille),
+                "GLB1"  => $this->lireGlb1($taille),
                 default => $this->i += $taille + self::ECART_BLOC,
             };
         }
         return ['modele' => $this->modele['nom'], 'os' => $this->os,
-                'sons' => $this->sons, 'compositions' => $this->compositions()];
+                'sons' => $this->sons, 'compositions' => $this->compositions(), 'categories' => $this->categories()];
     }
 
     //----------------------------------------------------------------------------------------------
@@ -230,6 +238,35 @@ class LecteurPcg
             }
         }
         $this->i = $fin;
+    }
+
+    private function lireGlb1(int $taille): void {
+        $this->global = $this->i + self::ECART_BLOC;
+        $this->i += $taille + self::ECART_BLOC;
+    }
+
+    //----------------------------------------------------------------------------------------------
+    // CATEGORIES (bloc GLB1)
+    //----------------------------------------------------------------------------------------------
+    private function categories(): ?array {
+        $tailleType = self::NB_CATEGORIES * (self::TAILLE_NOM + self::NB_SOUS_CATEGORIES * self::TAILLE_NOM);
+        $debut = $this->global + self::GLOBAL_CATEGORIES;
+        if ($this->global === 0 || $debut + 2 * $tailleType > strlen($this->d)) {return null;}
+        $categories = [];
+        foreach ([self::PROGRAM, self::COMBI] as $rang => $type) {
+            $base = $debut + $rang * $tailleType;
+            for ($c = 0; $c < self::NB_CATEGORIES; $c++) {
+                $sous = [];
+                for ($s = 0; $s < self::NB_SOUS_CATEGORIES; $s++) {
+                    $sous[$s] = $this->nom($base + self::NB_CATEGORIES * self::TAILLE_NOM
+                                           + ($c * self::NB_SOUS_CATEGORIES + $s) * self::TAILLE_NOM);
+                }
+                $categories[$type][$c] = ['libelle' => $this->nom($base + $c * self::TAILLE_NOM), 'sous' => $sous];
+            }
+        }
+        //contrôle : des noms vides partout signalent un Global illisible
+        $noms = array_column($categories[self::PROGRAM], 'libelle');
+        return count(array_filter($noms, fn($n) => $n !== "")) >= self::NB_CATEGORIES / 2 ? $categories : null;
     }
 
     //----------------------------------------------------------------------------------------------

@@ -63,6 +63,54 @@ class Categorie
         return self::$cache[$cle] = $id;
     }
 
+    public static function chargerDepuisKronos(array $categories): array {
+    //met la table à jour avec les catégories lues dans le Global d'un PCG (LecteurPcg::lire()['categories'])
+    //pour chaque type, n° de catégorie et n° de sous-catégorie : libellé mis à jour, ou ligne créée
+    //les anciennes lignes sans n° (-1) ne sont pas touchées : elles se fusionnent ensuite à l'écran
+    //retourne ['creees' => n, 'renommees' => n, 'inchangees' => n]
+        $resultat = ['creees' => 0, 'renommees' => 0, 'inchangees' => 0];
+        $types = array_flip(self::types());                         //Program / Combi => id
+        Model::mdTransaction(function () use ($categories, $types, &$resultat): bool {
+            foreach ($categories as $nomType => $liste) {
+                if (!isset($types[$nomType])) {continue;}
+                foreach ($liste as $numero => $categorie) {
+                    $idCategorie = self::poser($types[$nomType], self::RACINE, (int)$numero, $categorie['libelle'], $resultat);
+                    foreach ($categorie['sous'] as $numeroSous => $libelle) {
+                        self::poser($types[$nomType], $idCategorie, (int)$numeroSous, $libelle, $resultat);
+                    }
+                }
+            }
+            return true;
+        });
+        self::viderCache();
+        return $resultat;
+    }
+
+    private static function poser(int $idType, int $idParent, int $numero, string $libelle, array &$resultat): int {
+    //ligne (type, parent, n°) avec ce libellé : retourne son id
+        $racine = $idParent === self::RACINE;
+        $libelle = mb_substr(trim($libelle) !== "" ? trim($libelle) : ($racine ? self::LIBELLE_CATEGORIE : self::LIBELLE_SSCATEGORIE),
+                             0, self::LONGUEUR_LIBELLE);
+        $existant = Model::mdRequeteListerUnique(
+                "SELECT id, libelle FROM " . self::TABLE . " WHERE idCategorie = ? AND idPersonalise = ?"
+              . ($racine ? " AND idType = ?" : "") . " ORDER BY id LIMIT 1",
+                $racine ? [$idParent, $numero, $idType] : [$idParent, $numero]);
+        if (count($existant) === 0) {
+            Model::mdInsert(self::TABLE, ['idPersonalise' => $numero, 'libelle' => $libelle, 'idCategorie' => $idParent,
+                                          'idType' => $racine ? $idType : null]);
+            $resultat['creees']++;
+            return (int)Database::dbConnect()->lastInsertId();
+        }
+        if ((string)$existant['libelle'] !== $libelle) {
+            Model::mdRequeteExecuter("UPDATE " . self::TABLE . " SET libelle = :libelle WHERE id = :id",
+                                     ['libelle' => $libelle, 'id' => (int)$existant['id']]);
+            $resultat['renommees']++;
+        } else {
+            $resultat['inchangees']++;
+        }
+        return (int)$existant['id'];
+    }
+
     //------------------------------------------------------------------------------------------------
     // TYPES
     //------------------------------------------------------------------------------------------------
