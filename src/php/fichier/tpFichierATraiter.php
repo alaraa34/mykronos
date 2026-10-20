@@ -14,7 +14,12 @@ $etat = fn($valeur) => (int)$valeur === 1
         : '<i class="bi bi-circle text-secondary" title="À faire"></i>';
 ob_start(); ?>
 <section class="py-4">
-    <h2 class="h4 mb-3">Fichiers à traiter <span class="badge text-bg-secondary"><?= count($fichiers) ?></span></h2>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="h4 mb-0">Fichiers à traiter <span class="badge text-bg-secondary"><?= count($fichiers) ?></span></h2>
+        <a class="btn btn-dark btn-sm" href="<?= TbAdressage::getURLstatic('fichier', 'importerFichiersOutput', 0, 'son') ?>">
+            <i class="bi bi-box-arrow-in-down"></i> Importer les fichiers output
+        </a>
+    </div>
     <?php if (count($fichiers) === 0): ?>
         <p class="text-muted">Aucun fichier à traiter.</p>
     <?php else: ?>
