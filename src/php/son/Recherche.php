@@ -52,7 +52,24 @@ class Recherche
         if ($idTypologie === self::SAUF_KRONOS) {$conditions[] = "(ty.nom IS NULL OR ty.nom NOT LIKE ?)"; $parametres[] = self::PREFIXE_KRONOS . "%";}
         if ($idTypologie === self::KRONOS)      {$conditions[] = "ty.nom LIKE ?";                         $parametres[] = self::PREFIXE_KRONOS . "%";}
 
-        $sons = Model::mdRequeteLister(
+        $sons = self::lireSons(implode(" AND ", $conditions), $parametres, self::MAXIMUM + 1);
+        $trop = count($sons) > self::MAXIMUM;
+        $sons = array_slice($sons, 0, self::MAXIMUM);
+        return ['sons' => self::ajouterLiens($sons), 'trop' => $trop];
+    }
+
+    public static function combi(int $idSon): array {
+    //une combi avec sa composition et sa présence sur mes Kronos (fiche à imprimer), [] si inconnue
+        $idCombi = array_flip(Categorie::types())['Combi'] ?? 0;
+        $sons = self::lireSons("so.id = ? AND so.idType = ?", [$idSon, $idCombi], 1);
+        if (count($sons) === 0) {return [];}
+        $resultat = self::ajouterPresenceKronos(['sons' => self::ajouterLiens($sons), 'trop' => false]);
+        return ['combi' => $resultat['sons'][0], 'kronos' => $resultat['kronos']];
+    }
+
+    private static function lireSons(string $where, array $parametres, int $limite): array {
+    //sons avec type, catégorie, fichier et provenance
+        return Model::mdRequeteLister(
             "SELECT so.id, so.nom, so.banque, so.idType, so.idFichier, so.favori, so.moteur, so.tempo, t.valeurA AS type,"
           . " sc.libelle AS sousCategorie, c.libelle AS categorie,"
           . " f.libelle AS fichier, f.emplacement, f.exclus, ty.nom AS typologie"
@@ -62,12 +79,9 @@ class Recherche
           . " LEFT JOIN " . Nomenclature::TABLE . " ty ON ty.id = f.typologie"
           . " LEFT JOIN " . Categorie::TABLE . " sc ON sc.id = so.idSsCategorie"
           . " LEFT JOIN " . Categorie::TABLE . " c ON c.id = sc.idCategorie"
-          . " WHERE " . implode(" AND ", $conditions)
-          . " ORDER BY so.nom, f.libelle, so.banque LIMIT " . (self::MAXIMUM + 1),
+          . " WHERE " . $where
+          . " ORDER BY so.nom, f.libelle, so.banque LIMIT " . $limite,
             $parametres);
-        $trop = count($sons) > self::MAXIMUM;
-        $sons = array_slice($sons, 0, self::MAXIMUM);
-        return ['sons' => self::ajouterLiens($sons), 'trop' => $trop];
     }
 
     public static function mots(string $texte): array {

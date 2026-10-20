@@ -97,6 +97,8 @@ ob_start(); ?>
                                 <?= count($combi['programs']) === 0 ? 'disabled' : '' ?>>
                             <i class="bi bi-diagram-3"></i> <?= count($combi['programs']) ?>
                         </button>
+                        <a class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener" title="Fiche à imprimer"
+                           href="<?= TbAdressage::getURLstatic('son', 'imprimerCombi', (int)$combi['id'], 'recherche') ?>"><i class="bi bi-printer"></i></a>
                         <?php if ((int)$combi['exclus'] === 0): ?>
                         <a class="btn btn-outline-dark btn-sm" title="Télécharger le PCG <?= $e($combi['fichier']) ?>"
                            href="<?= TbAdressage::getURLstatic('fichier', 'telechargerFichier', (int)$combi['idFichier']) ?>"><i class="bi bi-download"></i></a>

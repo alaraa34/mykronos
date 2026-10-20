@@ -113,6 +113,10 @@ ob_start(); ?>
                             <i class="bi <?= $estCombi ? 'bi-diagram-3' : 'bi-box-arrow-up-right' ?>"></i> <?= count($son['liens']) ?>
                         </button>
                         <?php endif; ?>
+                        <?php if ($estCombi): ?>
+                        <a class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener" title="Fiche à imprimer"
+                           href="<?= TbAdressage::getURLstatic('son', 'imprimerCombi', (int)$son['id'], 'recherche') ?>"><i class="bi bi-printer"></i></a>
+                        <?php endif; ?>
                         <?php if ((int)$son['exclus'] === 0): ?>
                         <a class="btn btn-outline-dark btn-sm" title="Télécharger le PCG <?= $e($son['fichier']) ?>"
                            href="<?= TbAdressage::getURLstatic('fichier', 'telechargerFichier', (int)$son['idFichier']) ?>">
