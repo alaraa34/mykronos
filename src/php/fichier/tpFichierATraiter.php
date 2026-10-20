@@ -4,7 +4,7 @@ namespace mykronos\src\php\fichier;
  * Fichiers PCG à traiter (import du contenu ou de la composition à faire)
  * Variable attendue : $fichiers (Fichier::listerATraiter)
  * La case Exclus est enregistrée immédiatement (AJAX vers ctExclureFichier)
- * et désactive le bouton Télécharger
+ * et désactive les boutons Importer et Télécharger
  ******************************************************************************/
 use shared\php\toolbox\Toolbox_adressage as TbAdressage;
 
@@ -16,8 +16,8 @@ ob_start(); ?>
 <section class="py-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <h2 class="h4 mb-0">Fichiers à traiter <span class="badge text-bg-secondary"><?= count($fichiers) ?></span></h2>
-        <a class="btn btn-dark btn-sm" href="<?= TbAdressage::getURLstatic('fichier', 'importerFichiersOutput', 0, 'son') ?>">
-            <i class="bi bi-box-arrow-in-down"></i> Importer les fichiers output
+        <a class="btn btn-dark btn-sm" href="<?= TbAdressage::getURLstatic('fichier', 'importerPcg', 0, 'son') ?>">
+            <i class="bi bi-box-arrow-in-down"></i> Importer tous les PCG à traiter
         </a>
     </div>
     <?php if (count($fichiers) === 0): ?>
@@ -33,7 +33,7 @@ ob_start(); ?>
                 <th class="text-center">Contenu</th>
                 <th class="text-center">Composition</th>
                 <th class="text-center">Exclus</th>
-                <th class="text-center">Télécharger</th>
+                <th class="text-center">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -51,8 +51,14 @@ ob_start(); ?>
                     <input class="form-check-input case-exclus" type="checkbox" data-id="<?= (int)$f['id'] ?>"
                            <?= $exclus ? 'checked' : '' ?> aria-label="Exclure <?= $e($f['libelle']) ?>">
                 </td>
-                <td class="text-center">
-                    <a class="btn btn-outline-dark btn-sm bouton-telecharger<?= $exclus ? ' disabled' : '' ?>"
+                <td class="text-center text-nowrap">
+                    <a class="btn btn-outline-dark btn-sm bouton-action<?= $exclus ? ' disabled' : '' ?>"
+                       title="Importer <?= $e($f['libelle']) ?>"
+                       <?= $exclus ? 'aria-disabled="true" tabindex="-1"' : '' ?>
+                       href="<?= TbAdressage::getURLstatic('fichier', 'importerPcgFichier', (int)$f['id'], 'son') ?>">
+                        <i class="bi bi-box-arrow-in-down"></i>
+                    </a>
+                    <a class="btn btn-outline-dark btn-sm bouton-action<?= $exclus ? ' disabled' : '' ?>"
                        title="Télécharger <?= $e($f['libelle']) ?>"
                        <?= $exclus ? 'aria-disabled="true" tabindex="-1"' : '' ?>
                        href="<?= TbAdressage::getURLstatic('fichier', 'telechargerFichier', (int)$f['id']) ?>">
@@ -71,17 +77,18 @@ $content = ob_get_clean();
 $urlExclure = TbAdressage::getURLstatic('fichier', 'exclureFichier');
 $script = <<<HTML
 <script>
-function activerTelechargement(ligne, actif) {
-//un fichier exclu ne peut pas être téléchargé
-    const bouton = ligne.querySelector('.bouton-telecharger');
-    bouton.classList.toggle('disabled', !actif);
-    if (actif) {
-        bouton.removeAttribute('aria-disabled');
-        bouton.removeAttribute('tabindex');
-    } else {
-        bouton.setAttribute('aria-disabled', 'true');
-        bouton.setAttribute('tabindex', '-1');
-    }
+function activerActions(ligne, actif) {
+//un fichier exclu ne peut être ni importé ni téléchargé
+    ligne.querySelectorAll('.bouton-action').forEach(function (bouton) {
+        bouton.classList.toggle('disabled', !actif);
+        if (actif) {
+            bouton.removeAttribute('aria-disabled');
+            bouton.removeAttribute('tabindex');
+        } else {
+            bouton.setAttribute('aria-disabled', 'true');
+            bouton.setAttribute('tabindex', '-1');
+        }
+    });
 }
 document.querySelectorAll('.case-exclus').forEach(function (caseExclus) {
     caseExclus.addEventListener('change', function () {
@@ -95,7 +102,7 @@ document.querySelectorAll('.case-exclus').forEach(function (caseExclus) {
             .then(function (resultat) {
                 if (!resultat.ok) { throw new Error('refus'); }
                 ligne.classList.toggle('fichier-exclus', caseExclus.checked);
-                activerTelechargement(ligne, !caseExclus.checked);
+                activerActions(ligne, !caseExclus.checked);
             })
             .catch(function () {
                 caseExclus.checked = !caseExclus.checked;

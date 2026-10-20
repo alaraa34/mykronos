@@ -14,7 +14,7 @@ class Son
     public const TABLE = PREFIXE_BDD . "son";
 
     public static function enregistrer(int $idFichier, int $idType, string $banque,
-                                       string $nom, int $idSsCategorie, int &$id = 0): string {
+                                       string $nom, ?int $idSsCategorie, int &$id = 0): string {
     //création ou mise à jour, retourne crees, modifies ou inchanges - $id reçoit l'id du son
         $existant = Model::mdRequeteListerUnique(
                 "SELECT id, nom, idSsCategorie FROM " . self::TABLE
@@ -28,7 +28,8 @@ class Son
             return 'crees';
         }
         $id = (int)$existant['id'];
-        if ((string)$existant['nom'] === $nom && (int)$existant['idSsCategorie'] === $idSsCategorie) {
+        $categorieExistante = $existant['idSsCategorie'] === null ? null : (int)$existant['idSsCategorie'];
+        if ((string)$existant['nom'] === $nom && $categorieExistante === $idSsCategorie) {
             return 'inchanges';
         }
         Model::mdUpdate(self::TABLE, ['nom' => $nom, 'idSsCategorie' => $idSsCategorie], "id=" . (int)$existant['id']);

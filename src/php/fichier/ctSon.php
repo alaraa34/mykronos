@@ -2,17 +2,29 @@
 declare(strict_types=1);
 namespace mykronos\src\php\fichier;
 /*******************************************************************************
- * Contrôleur son du domaine fichier : import des XML déposés dans fichiers/output
+ * Contrôleur son du domaine fichier : import direct des PCG (contenu + composition)
  * appel : index.php?fct=xxx&dom=fichier&ctr=son  -> fonction ctXxx
  ******************************************************************************/
 
-function ctImporterFichiersOutput(): void {
-//XML de contenu (<patch_list>) -> mk_son ; la composition viendra ensuite
+function ctImporterPcg(): void {
+//importe tous les fichiers à traiter (non exclus, contenu ou composition à 0)
+    set_time_limit(600);
     try {
-        $compteRendu = ImportContenu::importer();
+        $compteRendu = ImportPcg::importerATraiter();
     } catch (\Throwable $e) {
-        error_log("ctImporterFichiersOutput : " . $e->getMessage() . " (" . $e->getFile() . ":" . $e->getLine() . ")");
-        $compteRendu = ['fichiers' => [], 'ignores' => [], 'anomalies' => ["Import interrompu : " . $e->getMessage()]];
+        error_log("ctImporterPcg : " . $e->getMessage() . " (" . $e->getFile() . ":" . $e->getLine() . ")");
+        $compteRendu = ['fichiers' => [], 'anomalies' => ["Import interrompu : " . $e->getMessage()]];
     }
-    require('tpImportContenu.php');
+    require('tpImportPcg.php');
+}
+
+function ctImporterPcgFichier(int $id = 0): void {
+//importe (ou réimporte) un seul fichier, appel ...&fct=importerPcgFichier&id=xx
+    $compteRendu = ['fichiers' => [ImportPcg::importerUnFichier($id)], 'anomalies' => []];
+    require('tpImportPcg.php');
+}
+
+function ctImporterFichiersOutput(): void {
+//ancienne entrée du menu (fct=importerFichiersOutput) : redirigée vers l'import direct des PCG
+    ctImporterPcg();
 }
