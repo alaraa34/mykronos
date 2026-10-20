@@ -88,6 +88,12 @@ function ctEnregistrerSsCategories(int $id = 0): void {
     ctEditerSsCategories($id, $message, $succes);
 }
 
+function ctDetecterDoublons(): void {
+//Programs et Combis en double dans un même Kronos (fromK2 ou fromK3, pas entre les deux)
+    $doublons = Doublons::detecter();
+    require('tpDoublons.php');
+}
+
 function lignesSaisies(): array {
 //lignes[id][libelle] du formulaire
     $lignes = $_POST['lignes'] ?? [];
