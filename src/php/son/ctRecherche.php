@@ -20,6 +20,23 @@ function ctRechercherSon(): void {
     require('tpRecherche.php');
 }
 
+function ctRechercheBanque(): void {
+//sons d'une banque (U-G001) ou de toute une banque (U-G), par défaut sur mes Kronos
+//appel : index.php?fct=rechercheBanque&dom=son&ctr=recherche&banque=U-G001[&type=id][&typologie=id][&moteur=][&favoris=1]
+    $banque      = trim((string)filter_input(INPUT_GET, 'banque'));
+    $texte       = "";
+    $idType      = (int)filter_input(INPUT_GET, 'type', FILTER_VALIDATE_INT);
+    $saisie      = filter_input(INPUT_GET, 'typologie', FILTER_VALIDATE_INT);
+    $idTypologie = is_int($saisie) ? $saisie : Recherche::KRONOS;            //par défaut : mes Kronos
+    $moteur      = (string)filter_input(INPUT_GET, 'moteur');
+    $favoris     = filter_input(INPUT_GET, 'favoris') === "1";
+    $resultat    = Recherche::ajouterPresenceKronos(Recherche::rechercher("", $idType, $idTypologie,
+                                                                         ['moteur' => $moteur, 'favoris' => $favoris, 'banque' => $banque]));
+    $types       = Recherche::listeTypes();
+    $typologies  = Recherche::listeTypologies();
+    require('tpRecherche.php');
+}
+
 function ctRechercheCombinaison(): void {
 //recherche limitée aux combis, avec leur composition et leur présence sur mes Kronos
 //appel : index.php?fct=rechercheCombinaison&dom=son&ctr=recherche&q=texte[&typologie=id]

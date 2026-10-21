@@ -3,11 +3,14 @@ namespace mykronos\src\php\son;
 /*******************************************************************************
  * Recherche de sons
  * Variables attendues : $texte, $idType, $idTypologie, $moteur, $favoris, $resultat, $types, $typologies
+ * Recherche par banque (ctRechercheBanque) : $banque renseigné (chaîne), $texte vide
  ******************************************************************************/
 use shared\php\toolbox\Toolbox_adressage as TbAdressage;
 use shared\php\classes\socle\Menu        as Menu;
 
 $e = fn($valeur) => htmlspecialchars((string)$valeur);
+$banque ??= null;
+$parBanque = $banque !== null;
 $mots = Recherche::mots($texte);
 $surligner = function (string $nom) use ($mots, $e): string {
 //met en évidence les mots recherchés dans le nom (sans tenir compte des majuscules)
@@ -20,15 +23,21 @@ $surligner = function (string $nom) use ($mots, $e): string {
 $couleurs = ['Program' => 'primary', 'Combi' => 'success', 'WaveSequence' => 'warning', 'DrumKit' => 'danger', 'DrumPattern' => 'info'];
 ob_start(); ?>
 <section class="py-4">
-    <h2 class="h4 mb-3">Rechercher un son</h2>
+    <h2 class="h4 mb-3"><?= $parBanque ? "Rechercher par banque" : "Rechercher un son" ?></h2>
     <form method="get" action="index.php" class="row g-2 align-items-end mb-3" role="search" data-attente="Recherche en cours…">
-        <input type="hidden" name="<?= Menu::FONCTION ?>" value="rechercherSon">
+        <input type="hidden" name="<?= Menu::FONCTION ?>" value="<?= $parBanque ? 'rechercheBanque' : 'rechercherSon' ?>">
         <input type="hidden" name="<?= Menu::DOMAINE ?>" value="son">
         <input type="hidden" name="<?= Menu::CONTROLEUR ?>" value="recherche">
         <div class="col-12 col-md-3">
+            <?php if ($parBanque): ?>
+            <label class="form-label small mb-1" for="banque">Banque</label>
+            <input type="search" class="form-control" id="banque" name="banque" value="<?= $e($banque) ?>"
+                   placeholder="ex : U-G001, U-G, I-A44" autofocus>
+            <?php else: ?>
             <label class="form-label small mb-1" for="q">Nom, catégorie ou sous-catégorie</label>
             <input type="search" class="form-control" id="q" name="q" value="<?= $e($texte) ?>"
                    placeholder="ex : brass stab, e.piano, pad" autofocus>
+            <?php endif; ?>
         </div>
         <div class="col-6 col-md-2">
             <label class="form-label small mb-1" for="type">Type</label>
@@ -70,11 +79,14 @@ ob_start(); ?>
         </div>
     </form>
 
-    <?php if ($texte === "" && !$favoris): ?>
+    <?php if ($parBanque && $banque === "" && !$favoris): ?>
+        <p class="text-muted">Tape une banque complète (U-G001, ou ug1) pour voir ce qu'elle contient dans chaque PCG,
+            ou seulement la banque (U-G, I-A, U-EE) pour en lister tous les sons. La provenance « Mes Kronos » compare tes K2 et K3.</p>
+    <?php elseif (!$parBanque && $texte === "" && !$favoris): ?>
         <p class="text-muted">Tape un ou plusieurs mots : chaque mot doit apparaître dans le nom du son, sa catégorie ou sa sous-catégorie.
             Sans mot, coche <i class="bi bi-star-fill favori"></i> Favoris pour lister tes favoris.</p>
     <?php elseif (count($resultat['sons']) === 0): ?>
-        <p class="text-muted">Aucun son trouvé<?= $texte !== "" ? " pour « " . $e($texte) . " »" : "" ?>.</p>
+        <p class="text-muted">Aucun son trouvé<?= $parBanque && $banque !== "" ? " en « " . $e($banque) . " »" : ($texte !== "" ? " pour « " . $e($texte) . " »" : "") ?>.</p>
     <?php else: ?>
         <p class="small">
             <?= count($resultat['sons']) ?> son<?= count($resultat['sons']) > 1 ? 's' : '' ?>
@@ -95,7 +107,7 @@ ob_start(); ?>
                         <?php include('tpInfosSon.php'); ?>
                     </td>
                     <td><span class="badge text-bg-<?= $couleurs[$son['type']] ?? 'secondary' ?>"><?= $e($son['type']) ?></span></td>
-                    <td class="text-nowrap"><?= $e($son['banque']) ?></td>
+                    <td class="text-nowrap<?= $parBanque ? ' fw-semibold' : '' ?>"><?= $e($son['banque']) ?></td>
                     <td class="small">
                         <?php if ($son['categorie'] !== null): ?>
                             <?= $surligner((string)$son['categorie']) ?><br>

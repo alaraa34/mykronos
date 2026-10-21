@@ -36,7 +36,8 @@ class Recherche
         $mots = self::mots($texte);
         $moteur = (string)($options['moteur'] ?? "");
         $favoris = (bool)($options['favoris'] ?? false);
-        if (count($mots) === 0 && !$favoris) {return ['sons' => [], 'trop' => false];}
+        $banque  = self::motifBanque((string)($options['banque'] ?? ""));
+        if (count($mots) === 0 && !$favoris && $banque === null) {return ['sons' => [], 'trop' => false];}
 
         $conditions = ["1 = 1"];
         $parametres = [];
@@ -48,11 +49,13 @@ class Recherche
         if ($idType > 0)      {$conditions[] = "so.idType = ?";    $parametres[] = $idType;}
         if (isset(self::MOTEURS[$moteur])) {$conditions[] = "so.moteur LIKE ?"; $parametres[] = $moteur . "%";}
         if ($favoris)         {$conditions[] = "so.favori = 1";}
+        if ($banque !== null) {$conditions[] = "so.banque LIKE ?"; $parametres[] = $banque;}
         if ($idTypologie > 0) {$conditions[] = "f.typologie = ?";  $parametres[] = $idTypologie;}
         if ($idTypologie === self::SAUF_KRONOS) {$conditions[] = "(ty.nom IS NULL OR ty.nom NOT LIKE ?)"; $parametres[] = self::PREFIXE_KRONOS . "%";}
         if ($idTypologie === self::KRONOS)      {$conditions[] = "ty.nom LIKE ?";                         $parametres[] = self::PREFIXE_KRONOS . "%";}
 
-        $sons = self::lireSons(implode(" AND ", $conditions), $parametres, self::MAXIMUM + 1);
+        $ordre = $banque !== null ? "so.banque, f.libelle, so.idType" : "so.nom, f.libelle, so.banque";
+        $sons = self::lireSons(implode(" AND ", $conditions), $parametres, self::MAXIMUM + 1, $ordre);
         $trop = count($sons) > self::MAXIMUM;
         $sons = array_slice($sons, 0, self::MAXIMUM);
         return ['sons' => self::ajouterLiens($sons), 'trop' => $trop];
@@ -67,7 +70,20 @@ class Recherche
         return ['combi' => $resultat['sons'][0], 'kronos' => $resultat['kronos']];
     }
 
-    private static function lireSons(string $where, array $parametres, int $limite): array {
+    public static function motifBanque(string $saisie): ?string {
+    //motif LIKE d'une banque saisie, null si vide
+    //  "U-G001", "ug1", "U-G 1" -> U-G001 ; "U-G" -> toute la banque U-G (sans U-GG)
+    //  autre saisie : banques qui commencent par le texte saisi
+        $saisie = strtoupper(preg_replace('/\s+/', "", $saisie));
+        if ($saisie === "") {return null;}
+        if (preg_match('/^([IU])-?([A-G])(\2?)(\d{0,3})$/', $saisie, $m)) {
+            $prefixe = $m[1] . "-" . $m[2] . $m[3];
+            return $m[4] === "" ? $prefixe . "___" : $prefixe . sprintf("%03d", (int)$m[4]);
+        }
+        return addcslashes($saisie, "%_\\") . "%";
+    }
+
+    private static function lireSons(string $where, array $parametres, int $limite, string $ordre = "so.nom, f.libelle, so.banque"): array {
     //sons avec type, catégorie, fichier et provenance
         return Model::mdRequeteLister(
             "SELECT so.id, so.nom, so.banque, so.idType, so.idFichier, so.favori, so.moteur, so.tempo, t.valeurA AS type,"
@@ -80,7 +96,7 @@ class Recherche
           . " LEFT JOIN " . Categorie::TABLE . " sc ON sc.id = so.idSsCategorie"
           . " LEFT JOIN " . Categorie::TABLE . " c ON c.id = sc.idCategorie"
           . " WHERE " . $where
-          . " ORDER BY so.nom, f.libelle, so.banque LIMIT " . $limite,
+          . " ORDER BY " . $ordre . " LIMIT " . $limite,
             $parametres);
     }
 
