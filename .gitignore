@@ -8,3 +8,6 @@
 # Configuration avec mots de passe (base de données, mail)
 /ENVIR*.txt
 /MAIL*.txt
+
+# mot de passe de production
+/.htpasswd

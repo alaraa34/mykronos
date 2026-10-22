@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- application installable (PWA) : actif uniquement en https (production) -->
-<link rel="manifest" href="index.php?ctr=accueil&amp;fct=manifest">
+<link rel="manifest" href="index.php?ctr=accueil&amp;fct=manifest" crossorigin="use-credentials">
 <meta name="theme-color" content="#2b2d30">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <script>

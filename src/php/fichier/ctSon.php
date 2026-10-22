@@ -10,6 +10,7 @@ namespace mykronos\src\php\fichier;
 function ctImporterPcg(): void {
 //importe tous les fichiers à traiter (non exclus, contenu ou composition à 0)
     set_time_limit(600);
+    @ini_set('memory_limit', '512M');           //les exports Kronos complets font près de 50 Mo
     try {
         $compteRendu = ImportPcg::importerATraiter();
     } catch (\Throwable $e) {
@@ -21,6 +22,8 @@ function ctImporterPcg(): void {
 
 function ctImporterPcgFichier(int $id = 0): void {
 //importe (ou réimporte) un seul fichier, appel ...&fct=importerPcgFichier&id=xx
+    set_time_limit(300);
+    @ini_set('memory_limit', '512M');
     $compteRendu = ['fichiers' => [ImportPcg::importerUnFichier($id)], 'anomalies' => []];
     require('tpImportPcg.php');
 }

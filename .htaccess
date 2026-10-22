@@ -1,0 +1,17 @@
+# myKronos - protection du dossier
+Options -Indexes
+
+# fichiers de configuration (mots de passe) jamais servis
+<FilesMatch "^(ENVIR.*|MAIL.*)\.txt$|^\.ht|^README\.md$">
+    Require all denied
+</FilesMatch>
+
+# en production seulement : identifiant et mot de passe demandés par le navigateur
+# (en local sur WAMP, l'adresse est localhost : pas de mot de passe)
+<If "%{HTTP_HOST} !~ /localhost/">
+    AuthType Basic
+    AuthName "myKronos"
+    # chemin ABSOLU du fichier .htpasswd sur le serveur : à adapter
+    AuthUserFile /CHEMIN/ABSOLU/www/mykronos/.htpasswd
+    Require valid-user
+</If>
